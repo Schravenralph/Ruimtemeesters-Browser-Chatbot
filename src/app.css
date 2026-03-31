@@ -1,5 +1,4 @@
 @reference "./tailwind.css";
-@import './lib/themes/ruimtemeesters.css';
 
 @font-face {
 	font-family: 'Inter';
@@ -816,3 +815,6 @@ body {
 #note-content-container .ProseMirror {
 	padding-bottom: 2rem; /* space for the bottom toolbar */
 }
+
+/* Ruimtemeesters brand overrides — must be LAST to win the cascade */
+@import './lib/themes/ruimtemeesters.css';

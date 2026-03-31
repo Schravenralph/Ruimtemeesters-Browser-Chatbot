@@ -190,9 +190,11 @@
 			await signInHandler();
 		} else if (
 			!$config?.features.enable_login_form &&
-			$config?.oauth?.providers?.oidc
+			$config?.oauth?.providers?.oidc &&
+			!$page.url.searchParams.get('error')
 		) {
 			// Auto-redirect to OIDC when login form is disabled (Clerk SSO)
+			// Skip redirect if there's an error param to avoid infinite loop
 			window.location.href = `${WEBUI_BASE_URL}/oauth/oidc/login`;
 		} else {
 			onboarding = $config?.onboarding ?? false;
