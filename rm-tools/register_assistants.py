@@ -28,7 +28,7 @@ ASSISTANTS = [
                 {"content": "Vergelijk het woningbouwbeleid van Utrecht en Amsterdam", "title": ["Vergelijk beleid", "woningbouw"]},
                 {"content": "Welke omgevingsregels gelden er voor het centrum van Eindhoven?", "title": ["Omgevingsregels", "voor Eindhoven"]},
             ],
-            "toolIds": ["rm_databank", "rm_geoportaal"],
+            "toolIds": ["rm_databank", "rm_geoportaal", "rm_aggregator"],
         },
         "params": {
             "system": """Je bent de Beleidsadviseur van Ruimtemeesters — een expert in Nederlands omgevingsbeleid.
@@ -84,7 +84,7 @@ Richtlijnen:
                 {"content": "Welke gebouwen in Amsterdam Centrum zijn hoger dan 30 meter?", "title": ["Gebouwdata", "Amsterdam"]},
                 {"content": "Zoek PDOK datasets over bodemkwaliteit", "title": ["PDOK zoeken", "bodemkwaliteit"]},
             ],
-            "toolIds": ["rm_geoportaal", "rm_databank"],
+            "toolIds": ["rm_geoportaal", "rm_databank", "rm_aggregator"],
         },
         "params": {
             "system": """Je bent de Ruimtelijk Adviseur van Ruimtemeesters — expert in ruimtelijke planning en omgevingsdata.
@@ -142,7 +142,7 @@ Richtlijnen:
                 {"content": "Welke gemeenten hebben actieve contracten?", "title": ["Gemeente status", "contracten"]},
                 {"content": "Wat zijn de nieuwste opdrachten in de inbox?", "title": ["Opdrachten", "inbox"]},
             ],
-            "toolIds": ["rm_databank", "rm_geoportaal", "rm_tsa", "rm_dashboarding", "rm_riens", "rm_sales_predictor", "rm_opdrachten"],
+            "toolIds": ["rm_databank", "rm_geoportaal", "rm_tsa", "rm_dashboarding", "rm_riens", "rm_sales_predictor", "rm_opdrachten", "rm_aggregator"],
         },
         "params": {
             "system": """Je bent de Ruimtemeesters AI Assistent — de centrale toegangspoort tot alle Ruimtemeesters applicaties en data.
@@ -229,9 +229,9 @@ def register_model(base_url: str, token: str, assistant: dict) -> bool:
         print(f"  + Model: {assistant['name']} ({assistant['id']})")
         return True
 
-    if resp.status_code == 400 and "already registered" in resp.text.lower():
+    if "already registered" in resp.text.lower():
         resp = requests.post(
-            f"{base_url}/api/v1/models/id/{assistant['id']}/update",
+            f"{base_url}/api/v1/models/model/update",
             headers=headers,
             json=payload,
         )
@@ -258,16 +258,21 @@ def register_prompt(base_url: str, token: str, prompt: dict) -> bool:
         print(f"  + Prompt: /{prompt['command']} — {prompt['name']}")
         return True
 
-    if resp.status_code == 400:
-        # Try update
-        resp = requests.post(
-            f"{base_url}/api/v1/prompts/command/{prompt['command']}/update",
-            headers=headers,
-            json=payload,
-        )
-        if resp.status_code == 200:
-            print(f"  ~ Updated prompt: /{prompt['command']}")
-            return True
+    if resp.status_code != 200:
+        # Find existing prompt ID by listing all prompts
+        list_resp = requests.get(f"{base_url}/api/v1/prompts/", headers=headers)
+        if list_resp.status_code == 200:
+            for p in list_resp.json():
+                if p.get("command") == prompt["command"]:
+                    resp = requests.post(
+                        f"{base_url}/api/v1/prompts/id/{p['id']}/update",
+                        headers=headers,
+                        json=payload,
+                    )
+                    if resp.status_code == 200:
+                        print(f"  ~ Updated prompt: /{prompt['command']}")
+                        return True
+                    break
 
     print(f"  x Failed prompt: /{prompt['command']} -- {resp.status_code}: {resp.text[:200]}")
     return False

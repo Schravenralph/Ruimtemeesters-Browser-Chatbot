@@ -24,6 +24,7 @@ TOOL_FILES = [
     ("rm_riens", "Ruimtemeesters Sales Viewer", "rm-tools/riens.py"),
     ("rm_sales_predictor", "Ruimtemeesters Sales Predictor", "rm-tools/sales_predictor.py"),
     ("rm_opdrachten", "Ruimtemeesters Opdrachten Scanner", "rm-tools/opdrachten.py"),
+    ("rm_aggregator", "Ruimtemeesters Aggregator", "rm-tools/aggregator.py"),
 ]
 
 
