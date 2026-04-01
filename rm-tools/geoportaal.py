@@ -19,13 +19,17 @@ class Tools:
     def __init__(self):
         self.valves = self.Valves()
 
-    def _headers(self) -> dict:
-        h: dict = {}
+    def _auth_headers(self, __request__=None) -> dict:
+        """Get auth headers: prefer Clerk token, fall back to API key."""
+        if __request__ is not None:
+            token = getattr(__request__, 'cookies', {}).get('oauth_id_token') or getattr(__request__, 'cookies', {}).get('__session')
+            if token:
+                return {"Authorization": f"Bearer {token}"}
         if self.valves.api_key:
-            h["X-API-Key"] = self.valves.api_key
-        return h
+            return {"X-API-Key": self.valves.api_key}
+        return {}
 
-    async def query_spatial_rules(self, query: str = "", rule_id: str = "", __user__: dict = {}) -> str:
+    async def query_spatial_rules(self, query: str = "", rule_id: str = "", __user__: dict = {}, __request__=None) -> str:
         """
         Look up spatial planning rules (omgevingsregels) that apply to a location or policy area.
         :param query: Search text for rules, e.g. 'bouwhoogte centrum Amsterdam'
@@ -34,63 +38,63 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             if rule_id:
-                resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/rules/{rule_id}", headers=self._headers())
+                resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/rules/{rule_id}", headers=self._auth_headers(__request__))
             else:
-                resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/rules", params={"q": query} if query else {}, headers=self._headers())
+                resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/rules", params={"q": query} if query else {}, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
 
-    async def get_air_quality(self, location: str = "", __user__: dict = {}) -> str:
+    async def get_air_quality(self, location: str = "", __user__: dict = {}, __request__=None) -> str:
         """
         Get air quality (luchtkwaliteit) data for a location in the Netherlands.
         :param location: Municipality name or location description
         :return: Air quality measurements including NO2, PM10, PM2.5
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/air-quality", params={"location": location} if location else {}, headers=self._headers())
+            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/air-quality", params={"location": location} if location else {}, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
 
-    async def get_weather(self, location: str = "", __user__: dict = {}) -> str:
+    async def get_weather(self, location: str = "", __user__: dict = {}, __request__=None) -> str:
         """
         Get current weather data for a location in the Netherlands.
         :param location: Municipality name or location description
         :return: Weather data including temperature, wind, precipitation
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/weather", params={"location": location} if location else {}, headers=self._headers())
+            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/weather", params={"location": location} if location else {}, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
 
-    async def get_building_data(self, location: str = "", __user__: dict = {}) -> str:
+    async def get_building_data(self, location: str = "", __user__: dict = {}, __request__=None) -> str:
         """
         Get 3D building data (3DBAG) for a location, including building heights and categories.
         :param location: Address or location description
         :return: Building data with geometry, height, and categorization
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/building", params={"location": location} if location else {}, headers=self._headers())
+            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/building", params={"location": location} if location else {}, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
 
-    async def search_documents(self, query: str, __user__: dict = {}) -> str:
+    async def search_documents(self, query: str, __user__: dict = {}, __request__=None) -> str:
         """
         Search spatial documents and policy maps in the Geoportaal.
         :param query: Search text for documents
         :return: Matching documents with spatial references
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.get(f"{self.valves.geoportaal_api_url}/search", params={"q": query}, headers=self._headers())
+            resp = await client.get(f"{self.valves.geoportaal_api_url}/search", params={"q": query}, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
 
-    async def search_pdok(self, query: str, __user__: dict = {}) -> str:
+    async def search_pdok(self, query: str, __user__: dict = {}, __request__=None) -> str:
         """
         Search the PDOK (Kadaster) national geo-datasets for Dutch spatial data.
         :param query: Search text for PDOK datasets
         :return: Matching PDOK datasets and layers
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/pdok/search", params={"q": query}, headers=self._headers())
+            resp = await client.get(f"{self.valves.geoportaal_api_url}/v1/pdok/search", params={"q": query}, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text

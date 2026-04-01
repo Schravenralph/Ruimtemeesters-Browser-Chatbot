@@ -25,8 +25,14 @@ class Tools:
     def __init__(self):
         self.valves = self.Valves()
 
-    def _headers(self) -> dict:
-        h = {"Content-Type": "application/json"}
+    def _auth_headers(self, __request__=None) -> dict:
+        """Get auth headers: prefer Clerk token, fall back to API key."""
+        h: dict = {}
+        if __request__ is not None:
+            token = getattr(__request__, 'cookies', {}).get('oauth_id_token') or getattr(__request__, 'cookies', {}).get('__session')
+            if token:
+                h["Authorization"] = f"Bearer {token}"
+                return h
         if self.valves.tsa_api_key:
             h["X-API-Key"] = self.valves.tsa_api_key
         return h
@@ -46,7 +52,7 @@ class Tools:
             resp = await client.post(
                 f"{self.valves.tsa_api_url}/api/v1/forecast/bevolking",
                 json={"geo_code": geo_code},
-                headers=self._headers(),
+                headers=self._auth_headers(__request__),
             )
             resp.raise_for_status()
             return resp.text
@@ -65,7 +71,7 @@ class Tools:
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
                 f"{self.valves.tsa_api_url}/api/v1/forecast/{geo_code}",
-                headers=self._headers(),
+                headers=self._auth_headers(__request__),
             )
             resp.raise_for_status()
             return resp.text
@@ -85,7 +91,7 @@ class Tools:
             resp = await client.post(
                 f"{self.valves.tsa_api_url}/api/v1/backtest/bevolking",
                 json={"geo_code": geo_code},
-                headers=self._headers(),
+                headers=self._auth_headers(__request__),
             )
             resp.raise_for_status()
             return resp.text
@@ -104,7 +110,7 @@ class Tools:
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
                 f"{self.valves.tsa_api_url}/api/v1/diagnostics/{geo_code}",
-                headers=self._headers(),
+                headers=self._auth_headers(__request__),
             )
             resp.raise_for_status()
             return resp.text
@@ -112,6 +118,7 @@ class Tools:
     async def list_gemeenten(
         self,
         __user__: dict = {},
+        __request__=None,
     ) -> str:
         """
         List all known Dutch municipalities with their CBS codes and metadata.
@@ -121,7 +128,7 @@ class Tools:
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
                 f"{self.valves.tsa_api_url}/api/v1/gemeenten",
-                headers=self._headers(),
+                headers=self._auth_headers(__request__),
             )
             resp.raise_for_status()
             return resp.text
@@ -129,6 +136,7 @@ class Tools:
     async def get_model_status(
         self,
         __user__: dict = {},
+        __request__=None,
     ) -> str:
         """
         Get status of available forecast models and the latest forecast run.
@@ -138,7 +146,7 @@ class Tools:
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
                 f"{self.valves.tsa_api_url}/api/v1/models/status",
-                headers=self._headers(),
+                headers=self._auth_headers(__request__),
             )
             resp.raise_for_status()
             return resp.text

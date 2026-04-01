@@ -19,23 +19,27 @@ class Tools:
     def __init__(self):
         self.valves = self.Valves()
 
-    def _headers(self) -> dict:
-        h: dict = {}
+    def _auth_headers(self, __request__=None) -> dict:
+        """Get auth headers: prefer Clerk token, fall back to API key."""
+        if __request__ is not None:
+            token = getattr(__request__, 'cookies', {}).get('oauth_id_token') or getattr(__request__, 'cookies', {}).get('__session')
+            if token:
+                return {"Authorization": f"Bearer {token}"}
         if self.valves.api_key:
-            h["X-API-Key"] = self.valves.api_key
-        return h
+            return {"X-API-Key": self.valves.api_key}
+        return {}
 
-    async def get_gemeente_status(self, __user__: dict = {}) -> str:
+    async def get_gemeente_status(self, __user__: dict = {}, __request__=None) -> str:
         """
         Get the contract status of all Dutch municipalities — which ones have active contracts with Ruimtemeesters, which are archived, organized by province.
         :return: List of municipalities with contract status (active/archived), province, and service type
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.get(f"{self.valves.riens_api_url}/api/municipalities", headers=self._headers())
+            resp = await client.get(f"{self.valves.riens_api_url}/api/municipalities", headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
 
-    async def update_gemeente(self, municipality_name: str, status: str = "", notes: str = "", __user__: dict = {}) -> str:
+    async def update_gemeente(self, municipality_name: str, status: str = "", notes: str = "", __user__: dict = {}, __request__=None) -> str:
         """
         Update the status or notes for a municipality in the sales viewer.
         :param municipality_name: Name of the municipality to update
@@ -49,6 +53,6 @@ class Tools:
         if notes:
             body["notes"] = notes
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
-            resp = await client.put(f"{self.valves.riens_api_url}/api/municipalities/{municipality_name}", json=body, headers=self._headers())
+            resp = await client.put(f"{self.valves.riens_api_url}/api/municipalities/{municipality_name}", json=body, headers=self._auth_headers(__request__))
             resp.raise_for_status()
             return resp.text
