@@ -44,7 +44,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.post(
-                f"{self.valves.tsa_api_url}/api/forecast/bevolking",
+                f"{self.valves.tsa_api_url}/api/v1/forecast/bevolking",
                 json={"geo_code": geo_code},
                 headers=self._headers(),
             )
@@ -64,7 +64,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.tsa_api_url}/api/forecast/{geo_code}",
+                f"{self.valves.tsa_api_url}/api/v1/forecast/{geo_code}",
                 headers=self._headers(),
             )
             resp.raise_for_status()
@@ -83,7 +83,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.post(
-                f"{self.valves.tsa_api_url}/api/backtest/bevolking",
+                f"{self.valves.tsa_api_url}/api/v1/backtest/bevolking",
                 json={"geo_code": geo_code},
                 headers=self._headers(),
             )
@@ -103,7 +103,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.tsa_api_url}/api/diagnostics/{geo_code}",
+                f"{self.valves.tsa_api_url}/api/v1/diagnostics/{geo_code}",
                 headers=self._headers(),
             )
             resp.raise_for_status()
@@ -120,7 +120,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.tsa_api_url}/api/gemeenten",
+                f"{self.valves.tsa_api_url}/api/v1/gemeenten",
                 headers=self._headers(),
             )
             resp.raise_for_status()
@@ -137,7 +137,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.tsa_api_url}/api/models/status",
+                f"{self.valves.tsa_api_url}/api/v1/models/status",
                 headers=self._headers(),
             )
             resp.raise_for_status()

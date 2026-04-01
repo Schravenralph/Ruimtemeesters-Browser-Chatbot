@@ -37,7 +37,7 @@ class Tools:
             if query:
                 params["q"] = query
             resp = await client.get(
-                f"{self.valves.dashboarding_api_url}/api/data",
+                f"{self.valves.dashboarding_api_url}/api/data/query",
                 params=params,
             )
             resp.raise_for_status()
@@ -54,7 +54,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.dashboarding_api_url}/api/stats",
+                f"{self.valves.dashboarding_api_url}/api/stats/overview",
             )
             resp.raise_for_status()
             return resp.text
@@ -70,7 +70,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.dashboarding_api_url}/api/trends",
+                f"{self.valves.dashboarding_api_url}/api/trends/overview",
             )
             resp.raise_for_status()
             return resp.text

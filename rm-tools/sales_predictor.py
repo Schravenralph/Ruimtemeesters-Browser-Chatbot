@@ -76,7 +76,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.sales_predictor_api_url}/api/comparison",
+                f"{self.valves.sales_predictor_api_url}/api/compare-models",
             )
             resp.raise_for_status()
             return resp.text
@@ -92,7 +92,7 @@ class Tools:
         """
         async with httpx.AsyncClient(timeout=self.valves.timeout) as client:
             resp = await client.get(
-                f"{self.valves.sales_predictor_api_url}/api/models",
+                f"{self.valves.sales_predictor_api_url}/api/models/status",
             )
             resp.raise_for_status()
             return resp.text
