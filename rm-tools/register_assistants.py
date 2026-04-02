@@ -28,7 +28,7 @@ ASSISTANTS = [
                 {"content": "Vergelijk het woningbouwbeleid van Utrecht en Amsterdam", "title": ["Vergelijk beleid", "woningbouw"]},
                 {"content": "Welke omgevingsregels gelden er voor het centrum van Eindhoven?", "title": ["Omgevingsregels", "voor Eindhoven"]},
             ],
-            "toolIds": ["rm_databank", "rm_geoportaal", "rm_aggregator"],
+            "toolIds": ["server:mcp:rm-databank", "server:mcp:rm-geoportaal", "server:mcp:rm-aggregator"],
         },
         "params": {
             "system": """Je bent de Beleidsadviseur van Ruimtemeesters — een expert in Nederlands omgevingsbeleid.
@@ -56,7 +56,7 @@ Richtlijnen:
                 {"content": "Vergelijk de demografische trends van de Randstad gemeenten", "title": ["Demografische trends", "Randstad"]},
                 {"content": "Run een backtest voor Amsterdam om de nauwkeurigheid van het voorspelmodel te valideren", "title": ["Backtest", "Amsterdam"]},
             ],
-            "toolIds": ["rm_dashboarding", "rm_tsa"],
+            "toolIds": ["server:mcp:rm-dashboarding", "server:mcp:rm-tsa"],
         },
         "params": {
             "system": """Je bent de Demografie Analist van Ruimtemeesters — specialist in bevolkingsdata en demografische prognoses.
@@ -84,7 +84,7 @@ Richtlijnen:
                 {"content": "Welke gebouwen in Amsterdam Centrum zijn hoger dan 30 meter?", "title": ["Gebouwdata", "Amsterdam"]},
                 {"content": "Zoek PDOK datasets over bodemkwaliteit", "title": ["PDOK zoeken", "bodemkwaliteit"]},
             ],
-            "toolIds": ["rm_geoportaal", "rm_databank", "rm_aggregator"],
+            "toolIds": ["server:mcp:rm-geoportaal", "server:mcp:rm-databank", "server:mcp:rm-aggregator"],
         },
         "params": {
             "system": """Je bent de Ruimtelijk Adviseur van Ruimtemeesters — expert in ruimtelijke planning en omgevingsdata.
@@ -112,7 +112,7 @@ Richtlijnen:
                 {"content": "Wat zijn de nieuwste opdrachten in de inbox?", "title": ["Opdrachten inbox", "nieuw"]},
                 {"content": "Hoe ziet de pipeline eruit? Welke deadlines komen eraan?", "title": ["Pipeline", "deadlines"]},
             ],
-            "toolIds": ["rm_riens", "rm_sales_predictor", "rm_opdrachten"],
+            "toolIds": ["server:mcp:rm-riens", "server:mcp:rm-sales-predictor", "server:mcp:rm-opdrachten"],
         },
         "params": {
             "system": """Je bent de Sales Adviseur van Ruimtemeesters — assistent voor business development en acquisitie.
@@ -142,7 +142,7 @@ Richtlijnen:
                 {"content": "Welke gemeenten hebben actieve contracten?", "title": ["Gemeente status", "contracten"]},
                 {"content": "Wat zijn de nieuwste opdrachten in de inbox?", "title": ["Opdrachten", "inbox"]},
             ],
-            "toolIds": ["rm_databank", "rm_geoportaal", "rm_tsa", "rm_dashboarding", "rm_riens", "rm_sales_predictor", "rm_opdrachten", "rm_aggregator"],
+            "toolIds": ["server:mcp:rm-databank", "server:mcp:rm-geoportaal", "server:mcp:rm-tsa", "server:mcp:rm-dashboarding", "server:mcp:rm-riens", "server:mcp:rm-sales-predictor", "server:mcp:rm-opdrachten", "server:mcp:rm-aggregator"],
         },
         "params": {
             "system": """Je bent de Ruimtemeesters AI Assistent — de centrale toegangspoort tot alle Ruimtemeesters applicaties en data.
