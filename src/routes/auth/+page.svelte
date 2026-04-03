@@ -189,11 +189,13 @@
 		if (($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false) {
 			await signInHandler();
 		} else if (
-			!$config?.features.enable_login_form &&
 			$config?.oauth?.providers?.oidc &&
-			!$page.url.searchParams.get('error')
+			!$page.url.searchParams.get('error') &&
+			(!$config?.features.enable_login_form || document.cookie.includes('__client_uat'))
 		) {
-			// Auto-redirect to OIDC when login form is disabled (Clerk SSO)
+			// Auto-redirect to OIDC when:
+			// 1. Login form is disabled (original behavior), OR
+			// 2. User has a Clerk session cookie (__client_uat on .datameesters.nl)
 			// Skip redirect if there's an error param to avoid infinite loop
 			window.location.href = `${WEBUI_BASE_URL}/oauth/oidc/login`;
 		} else {
