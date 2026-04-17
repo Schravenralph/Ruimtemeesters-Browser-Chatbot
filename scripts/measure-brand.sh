@@ -28,7 +28,7 @@ E_COUNT=$(docker exec "$DB_CONTAINER" psql -U rmchatbot -d rmchatbot -tAc \
   "SELECT COUNT(DISTINCT meta::jsonb->'profile_image_url') FROM model WHERE id LIKE 'rm-%';" 2>/dev/null | tr -d ' ')
 
 HAS_GREETING_UTIL="false"; [ -f src/lib/utils/greeting.ts ] && HAS_GREETING_UTIL="true"
-HAS_ABOUT_COPY="false"; grep -q "Gebouwd op Open WebUI" src/lib/components/chat/SettingsModal.svelte 2>/dev/null && HAS_ABOUT_COPY="true"
+HAS_ABOUT_COPY="false"; grep -q "Gebouwd op Open WebUI" src/lib/components/chat/Settings/About.svelte 2>/dev/null && HAS_ABOUT_COPY="true"
 HAS_SEED_SCRIPT="false"; [ -x scripts/seed-gemini-connection.sh ] && HAS_SEED_SCRIPT="true"
 
 export A_CT A_CODE MANIFEST CONFIG E_COUNT HAS_GREETING_UTIL HAS_ABOUT_COPY HAS_SEED_SCRIPT HOST
