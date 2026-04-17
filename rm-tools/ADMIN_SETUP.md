@@ -32,6 +32,9 @@ OpenWebUI UI.
 | `rm-sales-predictor` | `https://mcp.datameesters.nl/sales-predictor/mcp` | Sales Adviseur, Ruimtemeesters Assistent |
 | `rm-opdrachten` | `https://mcp.datameesters.nl/opdrachten/mcp` | Sales Adviseur, Ruimtemeesters Assistent |
 | `rm-aggregator` | `https://mcp.datameesters.nl/aggregator/mcp` | Beleidsadviseur, Ruimtelijk Adviseur, Ruimtemeesters Assistent |
+| `rm-knowledge` *(planned)* | `https://mcp.datameesters.nl/knowledge/mcp` | Ruimtemeesters Assistent |
+
+The `rm-knowledge` row is **not live yet** — see `Ruimtemeesters-MCP-Servers/docs/superpowers/specs/2026-04-17-memory-knowledge-tools.md`. It will host the Claude-Code-style `save_memory` / `recall_memory` / `get_memory` / `list_memories` / `forget_memory` tools. Architectural question (same `@rm-mcp/memory` package vs separate `@rm-mcp/knowledge`) is still open.
 
 **Exact server-ID string matters.** The IDs above match what
 `register_assistants.py` puts in each assistant's `meta.toolIds` (as
