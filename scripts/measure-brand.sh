@@ -22,7 +22,8 @@ from datetime import timedelta
 print(create_token({'id': '$ADMIN_USER_ID'}, timedelta(minutes=5)))
 " 2>/dev/null | tail -1)
 
-CONFIG=$(curl -s "$HOST/api/v1/configs" -H "Authorization: Bearer $TOKEN")
+CONFIG=$(curl -s "$HOST/api/config" -H "Authorization: Bearer $TOKEN")
+BANNERS=$(curl -s "$HOST/api/v1/configs/banners" -H "Authorization: Bearer $TOKEN")
 
 E_COUNT=$(docker exec "$DB_CONTAINER" psql -U rmchatbot -d rmchatbot -tAc \
   "SELECT COUNT(DISTINCT meta::jsonb->'profile_image_url') FROM model WHERE id LIKE 'rm-%';" 2>/dev/null | tr -d ' ')
@@ -31,7 +32,7 @@ HAS_GREETING_UTIL="false"; [ -f src/lib/utils/greeting.ts ] && HAS_GREETING_UTIL
 HAS_ABOUT_COPY="false"; grep -q "Gebouwd op Open WebUI" src/lib/components/chat/Settings/About.svelte 2>/dev/null && HAS_ABOUT_COPY="true"
 HAS_SEED_SCRIPT="false"; [ -x scripts/seed-gemini-connection.sh ] && HAS_SEED_SCRIPT="true"
 
-export A_CT A_CODE MANIFEST CONFIG E_COUNT HAS_GREETING_UTIL HAS_ABOUT_COPY HAS_SEED_SCRIPT HOST
+export A_CT A_CODE MANIFEST CONFIG BANNERS E_COUNT HAS_GREETING_UTIL HAS_ABOUT_COPY HAS_SEED_SCRIPT HOST
 
 python3 <<'PYEOF'
 import json, os, datetime
@@ -64,8 +65,12 @@ b_pass = (
     and "Open WebUI" not in b_name
 )
 
-# C — banner
-banners = (config.get("ui", {}).get("banners") or config.get("banners") or [])
+# C — banner (served by /api/v1/configs/banners, not /api/config)
+banners_txt = os.environ.get("BANNERS", "[]")
+try:
+    banners = json.loads(banners_txt)
+except Exception:
+    banners = []
 c_pass = any(
     "Besloten werkomgeving voor Ruimtemeesters" in (b.get("content", "") if isinstance(b, dict) else "")
     for b in banners
@@ -97,12 +102,8 @@ for path in [("features", "enable_community_sharing"), ("enable_community_sharin
         break
 f_pass = f_val is False
 
-# G — default model
-g_dm = (
-    config.get("default_models")
-    or config.get("ui", {}).get("default_models")
-    or ""
-)
+# G — default model (top-level field on /api/config)
+g_dm = config.get("default_models") or ""
 g_pass = g_dm == "gemini.gemini-2.5-flash-lite"
 
 # H — about copy

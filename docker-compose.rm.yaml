@@ -57,8 +57,9 @@ services:
       # --- Branding ---
       - WEBUI_NAME=${WEBUI_NAME:-Ruimtemeesters AI}
       - WEBUI_FAVICON_URL=/brand-assets/icon-blue.png
-      # PWA manifest override — RM colors + icon. Served from this container's own /static mount.
-      - EXTERNAL_PWA_MANIFEST_URL=http://localhost:8080/static/brand-assets/rm-manifest.json
+      # PWA manifest override — RM colors + icon. Path form (leading "/") makes the backend
+      # read it from the frontend build dir directly; avoids self-HTTP deadlock.
+      - EXTERNAL_PWA_MANIFEST_URL=/brand-assets/rm-manifest.json
       # Non-dismissible trust banner on every session.
       - 'WEBUI_BANNERS=[{"id":"rm-trust","type":"info","title":"","content":"Besloten werkomgeving voor Ruimtemeesters · Data wordt niet gedeeld met LLM-providers","dismissible":false,"timestamp":1713398400}]'
       # Default model — Gemini 2.5 Flash Lite (fast, cheap, verified).
