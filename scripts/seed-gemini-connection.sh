@@ -39,29 +39,40 @@ if [ -z "$GEMINI_KEY" ]; then
 fi
 
 # Mint a short-lived admin JWT inside the container (uses its own WEBUI_SECRET_KEY).
-TOKEN=$(docker exec "$APP_CONTAINER" python3 -c "
-from open_webui.utils.auth import create_token
+# Pass ADMIN_USER_ID via env (-e) and read it from os.environ inside Python —
+# nothing gets interpolated into the source so a UUID with unusual chars can't
+# break out of the Python string literal (defensive — UUIDs shouldn't contain
+# quotes, but external inputs don't belong in source either).
+TOKEN=$(docker exec -i -e ADMIN_USER_ID="$ADMIN_USER_ID" "$APP_CONTAINER" python3 - <<'PY' 2>/dev/null | tail -1
+import os
 from datetime import timedelta
-print(create_token({'id': '$ADMIN_USER_ID'}, timedelta(minutes=5)))
-" 2>/dev/null | tail -1)
+from open_webui.utils.auth import create_token
+print(create_token({'id': os.environ['ADMIN_USER_ID']}, timedelta(minutes=5)))
+PY
+)
 
 if [ -z "$TOKEN" ]; then
   echo "Failed to mint admin token in container $APP_CONTAINER." >&2
   exit 1
 fi
 
-BODY=$(cat <<JSON
-{
-  "ENABLE_OPENAI_API": true,
+# Build the request body with python's json.dumps so GEMINI_KEY and every other
+# value are JSON-escaped correctly. Keys that ever contain "/\ or control chars
+# (Google AI Studio keys don't today, but this is the right shape for any
+# secret) don't corrupt the payload.
+BODY=$(GEMINI_KEY="$GEMINI_KEY" python3 - <<'PY'
+import json, os
+body = {
+  "ENABLE_OPENAI_API": True,
   "OPENAI_API_BASE_URLS": [
     "https://api.openai.com/v1",
-    "https://generativelanguage.googleapis.com/v1beta/openai"
+    "https://generativelanguage.googleapis.com/v1beta/openai",
   ],
-  "OPENAI_API_KEYS": ["", "$GEMINI_KEY"],
+  "OPENAI_API_KEYS": ["", os.environ["GEMINI_KEY"]],
   "OPENAI_API_CONFIGS": {
-    "0": {"enable": false, "connection_type": "external"},
+    "0": {"enable": False, "connection_type": "external"},
     "1": {
-      "enable": true,
+      "enable": True,
       "connection_type": "external",
       "prefix_id": "gemini",
       "tags": [{"name": "Google"}],
@@ -70,12 +81,13 @@ BODY=$(cat <<JSON
         "gemini-3.1-flash-lite-preview",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
-        "gemini-2.5-flash-lite"
-      ]
-    }
-  }
+        "gemini-2.5-flash-lite",
+      ],
+    },
+  },
 }
-JSON
+print(json.dumps(body))
+PY
 )
 
 RESP=$(curl -sS -X POST "$HOST/openai/config/update" \
