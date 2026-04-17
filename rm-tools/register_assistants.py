@@ -105,7 +105,7 @@ Richtlijnen:
         "name": "Sales Adviseur",
         "base_model_id": BASE_MODEL,
         "meta": {
-            "profile_image_url": "/brand-assets/assistants/handshake.svg",
+            "profile_image_url": "/brand-assets/assistants/currency.svg",
             "description": "Business development assistant. Shows gemeente contract status, finds matching TenderNED assignments, runs sales forecasts, and provides market intelligence.",
             "suggestion_prompts": [
                 {"content": "Welke gemeenten hebben actieve contracten met Ruimtemeesters?", "title": ["Gemeente status", "actieve contracten"]},
