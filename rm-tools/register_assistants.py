@@ -142,12 +142,13 @@ Richtlijnen:
                 {"content": "Welke gemeenten hebben actieve contracten?", "title": ["Gemeente status", "contracten"]},
                 {"content": "Wat zijn de nieuwste opdrachten in de inbox?", "title": ["Opdrachten", "inbox"]},
             ],
-            "toolIds": ["server:mcp:rm-databank", "server:mcp:rm-geoportaal", "server:mcp:rm-tsa", "server:mcp:rm-dashboarding", "server:mcp:rm-riens", "server:mcp:rm-sales-predictor", "server:mcp:rm-opdrachten", "server:mcp:rm-aggregator"],
+            "toolIds": ["server:mcp:rm-memory", "server:mcp:rm-databank", "server:mcp:rm-geoportaal", "server:mcp:rm-tsa", "server:mcp:rm-dashboarding", "server:mcp:rm-riens", "server:mcp:rm-sales-predictor", "server:mcp:rm-opdrachten", "server:mcp:rm-aggregator"],
         },
         "params": {
             "system": """Je bent de Ruimtemeesters AI Assistent — de centrale toegangspoort tot alle Ruimtemeesters applicaties en data.
 
 Je hebt toegang tot alle tools:
+- Memory: BOPA sessies (create/get/update/list), cross-conversation state
 - Databank: beleidsdocumenten zoeken, kennisgraaf
 - Geoportaal: ruimtelijke regels, luchtkwaliteit, weer, gebouwdata
 - TSA: demografische prognoses (Prophet, SARIMA, ensemble)
@@ -163,6 +164,126 @@ Richtlijnen:
 - Wees proactief: als een vraag over beleid ook ruimtelijke context heeft, bied die aan
 - Bij onduidelijke vragen, vraag om verduidelijking
 - Verwijs naar specifieke bronnen en data waar mogelijk""",
+        },
+    },
+    {
+        "id": "rm-bopa-adviseur",
+        "name": "BOPA Adviseur",
+        "base_model_id": BASE_MODEL,
+        "meta": {
+            "profile_image_url": "/brand-assets/icon-blue.png",
+            "description": (
+                "Begeleidt adviseurs door het BOPA-evaluatieproces. "
+                "Beheert sessies (eigen memory MCP), zoekt beleidsdocumenten, "
+                "controleert ruimtelijke regels, en bouwt de onderbouwing op. "
+                "Zes fasen: haalbaarheid → strijdigheid → beleid → "
+                "omgevingsaspecten → onderbouwing → toetsing."
+            ),
+            "suggestion_prompts": [
+                {
+                    "content": (
+                        "Is een BOPA mogelijk op Linkensweg 64 in Oss voor "
+                        "een appartementengebouw van 20m?"
+                    ),
+                    "title": ["BOPA haalbaarheid", "Linkensweg 64 Oss"],
+                },
+                {
+                    "content": "Open mijn lopende BOPA sessie voor project 1042",
+                    "title": ["Sessie hervatten", "project 1042"],
+                },
+                {
+                    "content": (
+                        "Doorloop de strijdigheidsanalyse voor mijn huidige "
+                        "BOPA sessie"
+                    ),
+                    "title": ["Strijdigheidsanalyse", "fase 2"],
+                },
+            ],
+            "toolIds": [
+                "server:mcp:rm-memory",
+                "server:mcp:rm-databank",
+                "server:mcp:rm-geoportaal",
+            ],
+        },
+        "params": {
+            # Mirrors Ruimtemeesters-MCP-Servers/packages/memory/skills/bopa.md
+            # which is the canonical source (also shipped to Claude Code users
+            # as ~/.claude/skills/bopa/SKILL.md). Keep both in sync.
+            "system": """# BOPA Evaluatie Agent
+
+Je bent een senior adviseur ruimtelijke ordening. Je begeleidt adviseurs door
+het BOPA (Buitenplanse Omgevingsplanactiviteit) evaluatieproces.
+
+Je consumeert `@rm-mcp/memory` voor sessie-state, plus `@rm-mcp/databank` en
+`@rm-mcp/geoportaal` als read-only databronnen.
+
+## Sessie management
+
+Bij elk nieuw BOPA-verzoek:
+1. Gebruik `geocode_address` om locatie te bepalen *(Geoportaal MCP — TBD)*
+2. Roep `list_bopa_sessions({gemeente_code, project_id})` aan om te checken
+   of er al een sessie bestaat voor dit adres of project
+3. Bestaat er al een actieve sessie? Vraag de adviseur of die wil doorgaan
+   en gebruik `get_bopa_session({session_id})` om de huidige stand op te halen
+4. Geen sessie? Maak een nieuwe met
+   `create_bopa_session({project_id, gemeente_code, lon, lat, plan_intent})`
+5. Zodra een fase is afgerond: `update_bopa_session({session_id, phase, data})`
+
+De server dwingt de fase-afhankelijkheidsregels af. Krijg je een fout
+"missing prerequisite phase(s)", begin met die voorgaande fasen voordat je
+verder gaat.
+
+## Fasen
+
+```
+Phase 1 (Haalbaarheid)
+  │
+  ├──→ Phase 2 (Strijdigheid)  ──→ Phase 5 (Onderbouwing) ──→ Phase 6 (Toetsing)
+  │                                      ↑
+  ├──→ Phase 3 (Beleid) ────────────────┤
+  │                                      ↑
+  └──→ Phase 4 (Omgevingsaspecten) ─────┘
+```
+
+`get_bopa_session` returned `dependencies_met` — de phases waarvan de
+prerequisites OK zijn. Stuur de adviseur naar de volgende logische fase.
+
+### Fase 1 — Haalbaarheid ("Kan dit?")
+Tools: `activities_at_point` → `check_bouwvlak_hoogte` → `check_bkl_8_0b`
+*(Geoportaal MCP — TBD; in v1 stelt de adviseur deze data zelf samen)*
+Schrijf resultaat: `update_bopa_session({phase: 1, data: {verdict, ...}})`
+
+### Fase 2 — Strijdigheid ("Wat is in strijd?")
+Vereist: Fase 1.
+Tools: `ruimtelijke_toets` → `evaluate_rules` *(Geoportaal MCP — TBD)*
+
+### Fase 3 — Beleid ("Past het in beleid?")
+Vereist: Fase 1.
+Tools: `search_policy({section, gemeente_code})` (Databank MCP),
+plus geometrie-evaluatie (Geoportaal MCP — TBD).
+
+### Fase 4 — Omgevingsaspecten ("Belemmeringen?")
+Vereist: Fase 1.
+Tools: spatial checks (Geoportaal — TBD), uploads via `upload_research_report`
+(in latere release).
+
+### Fase 5 — Onderbouwing
+Vereist: Fasen 2 + 3 + 4. Levert markdown per sectie via
+`save_onderbouwing_section` (volgende release).
+
+### Fase 6 — Toetsing
+Vereist: Fase 5. `score_onderbouwing` levert score + gaps (volgende release).
+
+## Gedrag
+
+- Spreek Nederlands; gebruik correcte juridische terminologie
+- Citeer bronnen bij elke bewering
+- Vraag voor je doorgaat naar de volgende fase
+- Forceer geen volgorde — accepteer ad-hoc upload van rapporten via
+  `update_bopa_session` met de relevante phase
+- Verwijs naar Geoportaal voor visuele verificatie
+- Als een tool een MCP error returnt met "missing prerequisite", leg de
+  adviseur uit welke fase eerst moet""",
         },
     },
 ]
@@ -207,6 +328,40 @@ PROMPTS = [
         "command": "help",
         "name": "Help",
         "content": "Toon een overzicht van alle beschikbare commando's en wat de Ruimtemeesters AI Assistent kan doen. Organiseer per categorie: beleid, demografie, ruimtelijk, sales, en opdrachten.",
+    },
+    {
+        "command": "bopa-haalbaarheid",
+        "name": "BOPA Haalbaarheid",
+        "content": (
+            "Beoordeel de haalbaarheid van een BOPA op {{adres}} voor "
+            "{{plan_omschrijving}}. Begin met geocoden, dan "
+            "`activities_at_point`, `check_bouwvlak_hoogte`, en "
+            "`check_bkl_8_0b`. Sla het resultaat op in een nieuwe BOPA "
+            "sessie via `create_bopa_session` en "
+            "`update_bopa_session(phase=1, ...)`."
+        ),
+    },
+    {
+        "command": "bopa-strijdigheid",
+        "name": "BOPA Strijdigheid",
+        "content": (
+            "Voer de strijdigheidsanalyse uit voor BOPA sessie "
+            "{{session_id}}. Roep `ruimtelijke_toets` en `evaluate_rules` "
+            "aan, en schrijf het resultaat met "
+            "`update_bopa_session(phase=2, ...)`. Zorg dat Fase 1 eerst is "
+            "voltooid."
+        ),
+    },
+    {
+        "command": "bopa-beleid",
+        "name": "BOPA Beleidstoets",
+        "content": (
+            "Doe een beleidstoets per bestuurslaag voor BOPA sessie "
+            "{{session_id}}. Rijk: BKL artikelen + NOVI. Provincie: "
+            "verordening + omgevingsvisie. Gemeente: omgevingsvisie + "
+            "sectorbeleid. Gebruik `search_policy` per laag en sla op met "
+            "`update_bopa_session(phase=3, ...)`."
+        ),
     },
 ]
 
@@ -278,11 +433,39 @@ def register_prompt(base_url: str, token: str, prompt: dict) -> bool:
     return False
 
 
+def _dry_run() -> int:
+    """Print every assistant + prompt payload without calling the API."""
+    print(f"=== DRY RUN — {len(ASSISTANTS)} assistants, {len(PROMPTS)} prompts ===\n")
+    for a in ASSISTANTS:
+        print(f"- assistant id={a['id']} name={a['name']!r}")
+        print(f"    base_model_id: {a['base_model_id']}")
+        print(f"    toolIds: {a['meta'].get('toolIds', [])}")
+        print(f"    system prompt: {len(a['params']['system'])} chars")
+    print()
+    for p in PROMPTS:
+        print(f"- prompt /{p['command']} — {p['name']}")
+    print("\nNothing was sent. Re-run without --dry-run to register.")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Register RM assistants and prompts")
     parser.add_argument("--url", default="http://localhost:3333", help="OpenWebUI base URL")
-    parser.add_argument("--token", required=True, help="Admin JWT token")
+    parser.add_argument(
+        "--token",
+        help="Admin JWT token (required unless --dry-run)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print payloads without calling the API — useful in CI",
+    )
     args = parser.parse_args()
+
+    if args.dry_run:
+        return _dry_run()
+    if not args.token:
+        parser.error("--token is required unless --dry-run is passed")
 
     print(f"=== Registering {len(ASSISTANTS)} assistants ===\n")
     model_success = sum(1 for a in ASSISTANTS if register_model(args.url, args.token, a))
