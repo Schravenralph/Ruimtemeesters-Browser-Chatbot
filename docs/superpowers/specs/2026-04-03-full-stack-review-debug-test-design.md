@@ -81,24 +81,20 @@ In Phase 1, before starting any service:
 ### Steps
 
 1. **Create shared Docker network**
-
    - `docker network create rm-network` (if not exists)
    - Verify with `docker network ls`
 
 2. **Audit and resolve port conflicts**
-
    - Extract host port mappings from every docker-compose.yml
    - Resolve Databank/Riens 5432 collision
    - Document final port allocation map
 
 3. **Create `.env` files for every repo**
-
    - Copy from `.env.example` templates
    - Fill in credentials (use consistent passwords for dev)
    - Verify no hardcoded secrets in docker-compose files
 
 4. **Start data stores (order matters)**
-
    - Databank infra first: Neo4j, PostgreSQL, Redis, GraphDB
    - Geoportaal: PostGIS
    - TSA: PostgreSQL
@@ -107,7 +103,6 @@ In Phase 1, before starting any service:
    - Opdrachten: PostgreSQL (cold storage)
 
 5. **Health-check each data store**
-
    - `pg_isready` for each Postgres
    - Neo4j bolt connection test
    - Redis `PING`
@@ -171,18 +166,15 @@ Service health matrix (service x status x notes).
 ### Steps
 
 1. **Start MCP servers**
-
    - `cd Ruimtemeesters-MCP-Servers && docker compose up -d`
    - Verify all 8 servers healthy on ports 3101-3108
 
 2. **Start chatbot with MCP connections**
-
    - `docker compose -f docker-compose.rm.yaml up -d`
    - Verify `TOOL_SERVER_CONNECTIONS` env var is set correctly
    - Check chatbot logs for MCP tool discovery
 
 3. **Verify tool discovery**
-
    - Log in to chatbot UI
    - Check that all 8 MCP servers appear in tool list
    - Verify tool count matches expectations
@@ -198,7 +190,6 @@ Service health matrix (service x status x notes).
    | Sales-adviseur           | riens (get_gemeente_status), sales-predictor (run_sales_forecast)                | Check contract status of a gemeente        |
 
 5. **Auth flow testing**
-
    - Clerk SSO login (if configured locally)
    - Fallback auth (local account creation)
    - Verify JWT forwarding to MCP tools

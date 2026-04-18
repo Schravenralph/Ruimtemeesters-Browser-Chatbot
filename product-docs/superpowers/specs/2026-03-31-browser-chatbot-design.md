@@ -85,13 +85,13 @@ Team members currently switch between multiple applications (Databank, Geoportaa
 
 **Aggregator boundaries:**
 
-| Aggregator does                                                 | Aggregator does NOT                        |
-| --------------------------------------------------------------- | ------------------------------------------ |
-| Cross-app composition (Databank + Geoportaal queries)           | 1:1 proxy of single-app endpoints          |
+| Aggregator does                                                | Aggregator does NOT                        |
+| -------------------------------------------------------------- | ------------------------------------------ |
+| Cross-app composition (Databank + Geoportaal queries)          | 1:1 proxy of single-app endpoints          |
 | Protocol normalization (FastAPI Python apps ↔ Express TS apps) | Business logic (that stays in apps)        |
-| Auth token validation & RBAC check                              | Data transformation for specific consumers |
-| Rate limiting for the chatbot consumer                          | Being the only way to reach an app         |
-| Response trimming for LLM context windows                       | Duplicating existing app endpoints         |
+| Auth token validation & RBAC check                             | Data transformation for specific consumers |
+| Rate limiting for the chatbot consumer                         | Being the only way to reach an app         |
+| Response trimming for LLM context windows                      | Duplicating existing app endpoints         |
 
 ---
 
