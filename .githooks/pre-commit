@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit — dispatcher; runs every check and bails on the
+# first failure. Keep per-check logic in sibling .githooks/*.sh files.
+set -e
+
+HOOKS_DIR="$(git rev-parse --show-toplevel)/.githooks"
+
+# Security: refuse commits that bind services to public interfaces.
+if [ -x "$HOOKS_DIR/no-public-bind-check.sh" ]; then
+  "$HOOKS_DIR/no-public-bind-check.sh"
+fi
+
+# Add further checks (typecheck, lint, etc.) below this line.
