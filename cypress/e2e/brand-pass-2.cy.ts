@@ -33,7 +33,9 @@ describe('Brand Pass 2', () => {
 		it('exposes the non-dismissible Dutch trust banner in /api/v1/configs', () => {
 			cy.request({
 				url: '/api/v1/configs',
-				headers: { Authorization: `Bearer ${Cypress.env('TOKEN') || localStorage.getItem('token') || ''}` }
+				headers: {
+					Authorization: `Bearer ${Cypress.env('TOKEN') || localStorage.getItem('token') || ''}`
+				}
 			}).then((resp) => {
 				const banners = resp.body?.ui?.banners ?? resp.body?.banners ?? [];
 				const match = banners.find((b: { content?: string }) =>
@@ -67,11 +69,12 @@ describe('Brand Pass 2', () => {
 		it('reports enable_community_sharing=false in configs', () => {
 			cy.request({
 				url: '/api/v1/configs',
-				headers: { Authorization: `Bearer ${Cypress.env('TOKEN') || localStorage.getItem('token') || ''}` }
+				headers: {
+					Authorization: `Bearer ${Cypress.env('TOKEN') || localStorage.getItem('token') || ''}`
+				}
 			}).then((resp) => {
 				const flag =
-					resp.body?.features?.enable_community_sharing ??
-					resp.body?.enable_community_sharing;
+					resp.body?.features?.enable_community_sharing ?? resp.body?.enable_community_sharing;
 				expect(flag).to.eq(false);
 			});
 		});
@@ -85,7 +88,9 @@ describe('Brand Pass 2', () => {
 		it('returns gemini.gemini-2.5-flash-lite as default in configs', () => {
 			cy.request({
 				url: '/api/v1/configs',
-				headers: { Authorization: `Bearer ${Cypress.env('TOKEN') || localStorage.getItem('token') || ''}` }
+				headers: {
+					Authorization: `Bearer ${Cypress.env('TOKEN') || localStorage.getItem('token') || ''}`
+				}
 			}).then((resp) => {
 				const dm = resp.body?.default_models ?? resp.body?.ui?.default_models ?? '';
 				expect(dm).to.eq('gemini.gemini-2.5-flash-lite');
@@ -101,7 +106,9 @@ describe('Brand Pass 2', () => {
 
 		it('About tab contains RM attribution line', () => {
 			// Open user menu → Settings → About
-			cy.get('button[aria-label="User menu"], button[aria-label="Open user menu"]').first().click({ force: true });
+			cy.get('button[aria-label="User menu"], button[aria-label="Open user menu"]')
+				.first()
+				.click({ force: true });
 			cy.contains('Settings', { matchCase: false }).click({ force: true });
 			cy.contains(/^About$/).click({ force: true });
 			cy.contains('Gebouwd op Open WebUI').should('exist');
