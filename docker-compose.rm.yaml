@@ -48,7 +48,7 @@ services:
       chatbot-db:
         condition: service_healthy
     ports:
-      - "${OPEN_WEBUI_PORT:-3333}:8080"
+      - "127.0.0.1:${OPEN_WEBUI_PORT:-3333}:8080"
     environment:
       # --- Core ---
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -88,12 +88,13 @@ services:
       - CLERK_JWKS_URI=${CLERK_JWKS_URI:-https://clerk.datameesters.nl/.well-known/jwks.json}
       - CLERK_ISSUER=${CLERK_ISSUER:-https://clerk.datameesters.nl}
       # --- LLM Providers ---
-      # Multi-endpoint OpenAI-compatible: OpenAI + Google Gemini (AI Studio).
+      # Multi-endpoint OpenAI-compatible: OpenAI + Google Gemini (AI Studio) +
+      # OpenRouter (gateway to Claude Opus 4.7, Llama, DeepSeek, and many more).
       # Order matches OPENAI_API_KEYS to OPENAI_API_BASE_URLS by position.
       # Per-endpoint curation (prefix_id, model_ids, tags) is NOT env-readable in OpenWebUI;
       # configure it under Admin Panel → Settings → Connections after first boot.
-      - OPENAI_API_BASE_URLS=https://api.openai.com/v1;https://generativelanguage.googleapis.com/v1beta/openai
-      - OPENAI_API_KEYS=${OPENAI_API_KEY:-};${GEMINI_API_KEY:-}
+      - OPENAI_API_BASE_URLS=https://api.openai.com/v1;https://generativelanguage.googleapis.com/v1beta/openai;https://openrouter.ai/api/v1
+      - OPENAI_API_KEYS=${OPENAI_API_KEY:-};${GEMINI_API_KEY:-};${OPENROUTER_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # --- Audit logging ---
       - AUDIT_LOG_LEVEL=${AUDIT_LOG_LEVEL:-REQUEST}
