@@ -620,6 +620,7 @@ async def lifespan(app: FastAPI):
     # Ruimtemeesters Clerk-trust: env DEFAULT_USER_ROLE wins over any stale
     # PersistentConfig value, and existing role='pending' users get unstuck.
     from open_webui.utils.clerk_trust_fixes import apply_clerk_trust_fixes
+
     apply_clerk_trust_fixes()
 
     if LICENSE_KEY:
