@@ -177,6 +177,10 @@ Richtlijnen:
                 },
                 {'content': 'Welke gemeenten hebben actieve contracten?', 'title': ['Gemeente status', 'contracten']},
                 {'content': 'Wat zijn de nieuwste opdrachten in de inbox?', 'title': ['Opdrachten', 'inbox']},
+                {
+                    'content': 'Start een BOPA-haalbaarheidstoets voor een nieuw project — gebruik /bopa-haalbaarheid',
+                    'title': ['BOPA', 'haalbaarheidstoets'],
+                },
             ],
             'toolIds': [
                 'server:mcp:rm-databank',
@@ -201,6 +205,13 @@ Je hebt toegang tot alle tools:
 - Riens Sales Viewer: gemeentestatus en contracten
 - Sales Predictor: verkoopprognoses
 - Opdrachten Scanner: DAS/inhuur pipeline
+- Aggregator: cross-app zoeken over beleid + ruimtelijke + demografische data
+- Memory (rm-memory): sessiestate voor meerstapsworkflows zoals BOPA — bewaart per project_id en gemeente_code de fases en bevindingen
+
+BOPA-workflow (Buitenplanse Omgevingsplanactiviteit):
+- De adviseur kan een evaluatie starten via `/bopa-haalbaarheid` (Fase 1), `/bopa-strijdigheid` (Fase 2) of `/bopa-beleid` (Fase 3)
+- Volg de skill in `.claude/skills/bopa/SKILL.md`: geocode → list/create_bopa_session → fase-tools → update_bopa_session
+- Respecteer de fase-prerequisites die de memory-server afdwingt (Fase 2/3 vereisen Fase 1, etc.)
 
 Richtlijnen:
 - Antwoord altijd in het Nederlands
