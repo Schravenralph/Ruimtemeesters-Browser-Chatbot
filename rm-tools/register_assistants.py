@@ -266,6 +266,19 @@ PROMPTS = [
         'content': "Toon een overzicht van alle beschikbare commando's en wat de Ruimtemeesters AI Assistent kan doen. Organiseer per categorie: beleid, demografie, ruimtelijk, sales, en opdrachten.",
     },
     {
+        'command': 'bopa-status',
+        'name': 'BOPA — Lopende sessies',
+        'content': (
+            'Geef een overzicht van mijn lopende BOPA-sessies. '
+            'Roep `list_bopa_sessions({})` aan op de rm-memory MCP server (laat het filter leeg om alle '
+            'sessies van mijn account te zien — als het filter verplicht is, vraag dan om gemeente_code of '
+            'project_id). Toon per sessie: project_id, adres/locatie, gemeente_code, welke fasen al zijn '
+            'afgerond (1 t/m 6), welke fase de volgende logische stap is (gebruik `dependencies_met`), en '
+            'eventuele blocked-by hints. Sortér op meest recent bijgewerkt. Geen verdere tool-calls — alleen '
+            'de status, geen evaluatie.'
+        ),
+    },
+    {
         'command': 'bopa-haalbaarheid',
         'name': 'BOPA — Fase 1: Haalbaarheid',
         'content': (
