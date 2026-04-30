@@ -254,13 +254,48 @@ PROMPTS = [
         'name': 'Help',
         'content': "Toon een overzicht van alle beschikbare commando's en wat de Ruimtemeesters AI Assistent kan doen. Organiseer per categorie: beleid, demografie, ruimtelijk, sales, en opdrachten.",
     },
+    {
+        'command': 'bopa-haalbaarheid',
+        'name': 'BOPA — Fase 1: Haalbaarheid',
+        'content': (
+            'Start een BOPA-haalbaarheidstoets voor het adres {{adres}} (project: {{project_id}}). '
+            'Volg de BOPA skill: geocode het adres, roep `list_bopa_sessions` aan om bestaande sessies te vinden, '
+            'maak indien nodig een nieuwe sessie via `create_bopa_session`, en voer de Fase 1 (Haalbaarheid) checks uit '
+            '(`activities_at_point`, bouwvlak/hoogte/BKL 8.0b). Schrijf het verdict terug via '
+            '`update_bopa_session({phase: 1, ...})` en vat de uitkomst samen voor de adviseur.'
+        ),
+    },
+    {
+        'command': 'bopa-strijdigheid',
+        'name': 'BOPA — Fase 2: Strijdigheid',
+        'content': (
+            'Voer de BOPA Fase 2 (Strijdigheid) toets uit voor sessie {{session_id}}. '
+            'Vereist Fase 1 (Haalbaarheid) als prerequisite — als die nog niet is afgerond, leg dat uit en stel voor '
+            '`/bopa-haalbaarheid` eerst te draaien. Gebruik `ruimtelijke_toets` en `evaluate_rules` om de strijdigheden '
+            'met het omgevingsplan vast te stellen. Schrijf de bevindingen terug via '
+            '`update_bopa_session({phase: 2, ...})` en geef per strijdigheid een korte juridische motivering.'
+        ),
+    },
+    {
+        'command': 'bopa-beleid',
+        'name': 'BOPA — Fase 3: Beleid',
+        'content': (
+            'Voer de BOPA Fase 3 (Beleid) toets uit voor sessie {{session_id}}. '
+            'Vereist Fase 1 (Haalbaarheid) als prerequisite — als die nog niet is afgerond, leg dat uit en stel voor '
+            '`/bopa-haalbaarheid` eerst te draaien. Gebruik `search_policy({section, gemeente_code})` op de Databank '
+            'om relevante beleidsstukken op te halen, en koppel ze aan de geometrie via het Geoportaal. Schrijf de '
+            'gevonden beleidskaders terug via `update_bopa_session({phase: 3, ...})`. Citeer voor elke bewering de '
+            'titel en bron van het beleidsstuk; geen ongedekte beweringen.'
+        ),
+    },
 ]
 
 
-def register_model(base_url: str, token: str, assistant: dict) -> bool:
-    """Register or update an assistant model."""
-    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-    payload = {
+def _build_model_payload(assistant: dict) -> dict:
+    """Single source of truth for the assistant POST payload (used by both
+    live registration and --dry-run printing). Keep dry_run_model and
+    register_model aligned by going through this helper."""
+    return {
         'id': assistant['id'],
         'name': assistant['name'],
         'base_model_id': assistant['base_model_id'],
@@ -268,6 +303,12 @@ def register_model(base_url: str, token: str, assistant: dict) -> bool:
         'params': assistant['params'],
         'is_active': True,
     }
+
+
+def register_model(base_url: str, token: str, assistant: dict) -> bool:
+    """Register or update an assistant model."""
+    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+    payload = _build_model_payload(assistant)
 
     resp = requests.post(f'{base_url}/api/v1/models/create', headers=headers, json=payload)
 
@@ -324,20 +365,53 @@ def register_prompt(base_url: str, token: str, prompt: dict) -> bool:
     return False
 
 
+def dry_run_model(assistant: dict) -> bool:
+    """Print what would be POSTed for an assistant. Always succeeds."""
+    payload = _build_model_payload(assistant)
+    print(f'  ? Would register model: {assistant["name"]} ({assistant["id"]})')
+    print(f'    toolIds: {assistant["meta"].get("toolIds", [])}')
+    print(f'    suggestion_prompts: {len(assistant["meta"].get("suggestion_prompts", []))}')
+    print(f'    payload bytes: {len(json.dumps(payload))}')
+    return True
+
+
+def dry_run_prompt(prompt: dict) -> bool:
+    """Print what would be POSTed for a slash prompt. Always succeeds."""
+    print(f'  ? Would register prompt: /{prompt["command"]} — {prompt["name"]}')
+    print(f'    content preview: {prompt["content"][:80]}{"..." if len(prompt["content"]) > 80 else ""}')
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description='Register RM assistants and prompts')
     parser.add_argument('--url', default='http://localhost:3333', help='OpenWebUI base URL')
-    parser.add_argument('--token', required=True, help='Admin JWT token')
+    parser.add_argument('--token', help='Admin JWT token (required unless --dry-run)')
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Print payloads instead of POSTing. No --token needed.',
+    )
     args = parser.parse_args()
 
-    print(f'=== Registering {len(ASSISTANTS)} assistants ===\n')
-    model_success = sum(1 for a in ASSISTANTS if register_model(args.url, args.token, a))
+    if not args.dry_run and not args.token:
+        parser.error('--token is required unless --dry-run is set')
 
-    print(f'\n=== Registering {len(PROMPTS)} prompts ===\n')
-    prompt_success = sum(1 for p in PROMPTS if register_prompt(args.url, args.token, p))
+    suffix = ' (dry-run)' if args.dry_run else ''
 
-    print(f'\nModels: {model_success}/{len(ASSISTANTS)}')
-    print(f'Prompts: {prompt_success}/{len(PROMPTS)}')
+    print(f'=== Registering {len(ASSISTANTS)} assistants{suffix} ===\n')
+    if args.dry_run:
+        model_success = sum(1 for a in ASSISTANTS if dry_run_model(a))
+    else:
+        model_success = sum(1 for a in ASSISTANTS if register_model(args.url, args.token, a))
+
+    print(f'\n=== Registering {len(PROMPTS)} prompts{suffix} ===\n')
+    if args.dry_run:
+        prompt_success = sum(1 for p in PROMPTS if dry_run_prompt(p))
+    else:
+        prompt_success = sum(1 for p in PROMPTS if register_prompt(args.url, args.token, p))
+
+    print(f'\nModels: {model_success}/{len(ASSISTANTS)}{suffix}')
+    print(f'Prompts: {prompt_success}/{len(PROMPTS)}{suffix}')
 
     return 0 if model_success == len(ASSISTANTS) and prompt_success == len(PROMPTS) else 1
 
