@@ -26,15 +26,15 @@ added but the spinner stayed forever. Refresh didn't help.
 
 ```js
 for (const fileItem of fileItems) {
-    try {
-        const res = isYoutubeUrl(fileItem.url)
-            ? await processYoutubeVideo(localStorage.token, fileItem.url)
-            : await processWeb(localStorage.token, '', fileItem.url);
-        // … set fileItem.status = 'uploaded' on success
-    } catch (e) {
-        files = files.filter((f) => f.name !== url);   // ← `url` is undeclared
-        toast.error(`${e}`);
-    }
+	try {
+		const res = isYoutubeUrl(fileItem.url)
+			? await processYoutubeVideo(localStorage.token, fileItem.url)
+			: await processWeb(localStorage.token, '', fileItem.url);
+		// … set fileItem.status = 'uploaded' on success
+	} catch (e) {
+		files = files.filter((f) => f.name !== url); // ← `url` is undeclared
+		toast.error(`${e}`);
+	}
 }
 ```
 
@@ -91,8 +91,8 @@ the established remove-on-failure pattern. Toast error is already correct.
 
 ## Tracking
 
-| Action                                       | PR / Commit | Notes                       |
-| -------------------------------------------- | ----------- | --------------------------- |
-| Fix the catch-handler crash on this fork     | _(pending)_ |                             |
-| Send the same fix upstream to `open-webui`   | not yet     | Mirror PR after merge here. |
-| Defensive timeouts (client + server)         | not yet     | Follow-up.                  |
+| Action                                     | PR / Commit | Notes                       |
+| ------------------------------------------ | ----------- | --------------------------- |
+| Fix the catch-handler crash on this fork   | _(pending)_ |                             |
+| Send the same fix upstream to `open-webui` | not yet     | Mirror PR after merge here. |
+| Defensive timeouts (client + server)       | not yet     | Follow-up.                  |
