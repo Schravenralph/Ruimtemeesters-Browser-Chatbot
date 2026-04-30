@@ -281,8 +281,9 @@ PROMPTS = [
         'name': 'BOPA — Fase 3: Beleid',
         'content': (
             'Voer de BOPA Fase 3 (Beleid) toets uit voor sessie {{session_id}}. '
-            'Vereist Fase 1 (Haalbaarheid). Gebruik `search_policy({section, gemeente_code})` op de Databank om '
-            'relevante beleidsstukken op te halen, en koppel ze aan de geometrie via het Geoportaal. Schrijf de '
+            'Vereist Fase 1 (Haalbaarheid) als prerequisite — als die nog niet is afgerond, leg dat uit en stel voor '
+            '`/bopa-haalbaarheid` eerst te draaien. Gebruik `search_policy({section, gemeente_code})` op de Databank '
+            'om relevante beleidsstukken op te halen, en koppel ze aan de geometrie via het Geoportaal. Schrijf de '
             'gevonden beleidskaders terug via `update_bopa_session({phase: 3, ...})`. Citeer voor elke bewering de '
             'titel en bron van het beleidsstuk; geen ongedekte beweringen.'
         ),
@@ -290,10 +291,11 @@ PROMPTS = [
 ]
 
 
-def register_model(base_url: str, token: str, assistant: dict) -> bool:
-    """Register or update an assistant model."""
-    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-    payload = {
+def _build_model_payload(assistant: dict) -> dict:
+    """Single source of truth for the assistant POST payload (used by both
+    live registration and --dry-run printing). Keep dry_run_model and
+    register_model aligned by going through this helper."""
+    return {
         'id': assistant['id'],
         'name': assistant['name'],
         'base_model_id': assistant['base_model_id'],
@@ -301,6 +303,12 @@ def register_model(base_url: str, token: str, assistant: dict) -> bool:
         'params': assistant['params'],
         'is_active': True,
     }
+
+
+def register_model(base_url: str, token: str, assistant: dict) -> bool:
+    """Register or update an assistant model."""
+    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+    payload = _build_model_payload(assistant)
 
     resp = requests.post(f'{base_url}/api/v1/models/create', headers=headers, json=payload)
 
@@ -359,14 +367,7 @@ def register_prompt(base_url: str, token: str, prompt: dict) -> bool:
 
 def dry_run_model(assistant: dict) -> bool:
     """Print what would be POSTed for an assistant. Always succeeds."""
-    payload = {
-        'id': assistant['id'],
-        'name': assistant['name'],
-        'base_model_id': assistant['base_model_id'],
-        'meta': assistant['meta'],
-        'params': assistant['params'],
-        'is_active': True,
-    }
+    payload = _build_model_payload(assistant)
     print(f'  ? Would register model: {assistant["name"]} ({assistant["id"]})')
     print(f'    toolIds: {assistant["meta"].get("toolIds", [])}')
     print(f'    suggestion_prompts: {len(assistant["meta"].get("suggestion_prompts", []))}')
