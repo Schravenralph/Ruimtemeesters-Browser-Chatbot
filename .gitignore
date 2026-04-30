@@ -3,6 +3,7 @@ yarn.lock
 
 # Ruimtemeesters
 .superpowers/
+.claude/worktrees/
 .playwright-mcp/
 .DS_Store
 node_modules
