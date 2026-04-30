@@ -64,6 +64,7 @@ foot-guns memory). It must be a complete restore, not a partial one.
 
   Unknown IDs get silently filtered by the picker — not a blocker, just
   fewer visible models. Admins can adjust later.
+
 - Update the docstring at the top of the script to say
   "Gemini + OpenRouter" instead of "Gemini".
 - Update the post-POST sanity check to count both lists.
