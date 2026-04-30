@@ -37,6 +37,7 @@
 		showFileNavDir,
 		pyodideWorker
 	} from '$lib/stores';
+	import { embedContext } from '$lib/stores/embedContext';
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -755,23 +756,67 @@
 		}
 	};
 
+	// Origins allowed to talk to this SPA via window.postMessage. Includes the
+	// Open WebUI marketing site (export:stats handshake) and the Ruimtemeesters
+	// Databank app (rm:chatbot:context handshake when this SPA is iframed inside
+	// the Databank document detail page).
+	const RM_DATABANK_ORIGINS = [
+		'https://databank.datameesters.nl',
+		'https://databank.staging.datameesters.nl',
+		'http://localhost:5173',
+		'http://localhost:5050'
+	];
+	const ALLOWED_MESSAGE_ORIGINS = [
+		'https://openwebui.com',
+		'https://www.openwebui.com',
+		'http://localhost:9999',
+		...RM_DATABANK_ORIGINS
+	];
+
 	const windowMessageEventHandler = async (event) => {
-		if (
-			!['https://openwebui.com', 'https://www.openwebui.com', 'http://localhost:9999'].includes(
-				event.origin
-			)
-		) {
+		if (!ALLOWED_MESSAGE_ORIGINS.includes(event.origin)) {
 			return;
 		}
 
 		if (event.data === 'export:stats' || event.data?.type === 'export:stats') {
 			syncStatsEventData = event.data;
 			showSyncStatsModal = true;
+			return;
+		}
+
+		// Ruimtemeesters Databank tells us which document the user is currently
+		// viewing in the parent app. We mirror it into a store so chat pages can
+		// seed system prompts or render a context banner.
+		if (
+			event.data?.type === 'rm:chatbot:context' &&
+			RM_DATABANK_ORIGINS.includes(event.origin)
+		) {
+			const payload = event.data.payload;
+			if (payload && typeof payload === 'object' && typeof payload.documentId === 'string') {
+				embedContext.set({
+					documentId: payload.documentId,
+					source: payload.source ?? null,
+					documentType: payload.documentType ?? null,
+					publisher: payload.publisher ?? null,
+					title: payload.title ?? null
+				});
+			}
 		}
 	};
 
 	onMount(async () => {
 		window.addEventListener('message', windowMessageEventHandler);
+
+		// If we're inside an iframe, signal the parent that we're ready so it
+		// can post the document context. Used by the Ruimtemeesters Databank
+		// embed; harmless no-op when we're top-level.
+		if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+			try {
+				window.parent.postMessage({ type: 'rm:chatbot:ready' }, '*');
+			} catch (e) {
+				console.debug('rm:chatbot:ready postMessage failed:', e);
+			}
+		}
 
 		let touchstartY = 0;
 
@@ -1051,6 +1096,30 @@
 {/if}
 
 {#if loaded}
+	{#if $embedContext}
+		<!-- Banner shown when this SPA is embedded inside the Ruimtemeesters
+		     Databank app and the parent has told us which document the user is
+		     reading. Lets the user see the integration is alive without changing
+		     the rest of the chat surface. -->
+		<div
+			class="fixed top-0 inset-x-0 z-50 bg-blue-50 dark:bg-blue-950/60 border-b border-blue-200 dark:border-blue-800 px-4 py-2 text-xs text-blue-900 dark:text-blue-100 flex items-center justify-between gap-3"
+		>
+			<div class="truncate">
+				<span class="font-medium">Beleidsdocument in beeld:</span>
+				<span class="ml-1 truncate">{$embedContext.title ?? $embedContext.documentId}</span>
+				{#if $embedContext.publisher}
+					<span class="ml-2 opacity-75">· {$embedContext.publisher}</span>
+				{/if}
+			</div>
+			<button
+				type="button"
+				class="text-blue-700 dark:text-blue-300 hover:underline shrink-0"
+				on:click={() => embedContext.set(null)}
+			>
+				sluiten
+			</button>
+		</div>
+	{/if}
 	{#if $isApp}
 		<div class="flex flex-row h-screen">
 			<AppSidebar />
