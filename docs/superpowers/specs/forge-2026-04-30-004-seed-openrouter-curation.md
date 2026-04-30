@@ -61,6 +61,7 @@ foot-guns memory). It must be a complete restore, not a partial one.
   - `anthropic/claude-haiku-4.5`
   - `deepseek/deepseek-r1`
   - `meta-llama/llama-3.3-70b-instruct`
+
   Unknown IDs get silently filtered by the picker — not a blocker, just
   fewer visible models. Admins can adjust later.
 - Update the docstring at the top of the script to say
