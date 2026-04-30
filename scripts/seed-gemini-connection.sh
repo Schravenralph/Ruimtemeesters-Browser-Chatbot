@@ -17,6 +17,9 @@
 # Usage:
 #   scripts/seed-gemini-connection.sh
 #
+# After seeding, verify the resulting DB state with:
+#   scripts/verify-llm-connections.sh
+#
 # Overrides:
 #   HOST=http://localhost:3333
 #   APP_CONTAINER=rm-chatbot
