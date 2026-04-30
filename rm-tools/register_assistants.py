@@ -4,6 +4,8 @@ Register Ruimtemeesters assistant models and prompt templates with OpenWebUI.
 
 Usage:
     python rm-tools/register_assistants.py --url http://localhost:3333 --token <admin-jwt>
+    python rm-tools/register_assistants.py --dry-run
+    python rm-tools/register_assistants.py --base-model llama3.1:latest --token <jwt>
 """
 
 import argparse
@@ -12,8 +14,11 @@ import sys
 
 import requests
 
-# Base model to use for all assistants (must exist in OpenWebUI)
-BASE_MODEL = 'llama3.1:latest'
+# Base model to use for all assistants. Defaults to hosted Gemini Flash Lite —
+# matches DEFAULT_MODELS in docker-compose.rm.yaml so assistants stay reachable
+# even when the local Ollama is paused or doesn't have llama3.1 pulled.
+# Override per-deployment with the --base-model CLI flag.
+BASE_MODEL = 'gemini.gemini-2.5-flash-lite'
 
 ASSISTANTS = [
     {
@@ -393,6 +398,7 @@ def dry_run_model(assistant: dict) -> bool:
     """Print what would be POSTed for an assistant. Always succeeds."""
     payload = _build_model_payload(assistant)
     print(f'  ? Would register model: {assistant["name"]} ({assistant["id"]})')
+    print(f'    base_model_id: {assistant["base_model_id"]}')
     print(f'    toolIds: {assistant["meta"].get("toolIds", [])}')
     print(f'    suggestion_prompts: {len(assistant["meta"].get("suggestion_prompts", []))}')
     print(f'    payload bytes: {len(json.dumps(payload))}')
@@ -415,10 +421,19 @@ def main():
         action='store_true',
         help='Print payloads instead of POSTing. No --token needed.',
     )
+    parser.add_argument(
+        '--base-model',
+        default=None,
+        help=f'Override base_model_id for all assistants (default: {BASE_MODEL})',
+    )
     args = parser.parse_args()
 
     if not args.dry_run and not args.token:
         parser.error('--token is required unless --dry-run is set')
+
+    if args.base_model:
+        for a in ASSISTANTS:
+            a['base_model_id'] = args.base_model
 
     suffix = ' (dry-run)' if args.dry_run else ''
 
