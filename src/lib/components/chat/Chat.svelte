@@ -945,7 +945,7 @@
 
 				files = [...files];
 			} catch (e) {
-				files = files.filter((f) => f.name !== url);
+				files = files.filter((f) => f.name !== fileItem.url);
 				toast.error(`${e}`);
 			}
 		}
