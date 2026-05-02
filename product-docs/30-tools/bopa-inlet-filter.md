@@ -21,6 +21,9 @@ All of the following must be true:
   `target_models` Valve — comma-separated list).
 - The signed-in user has at least one row in `memory.bopa_sessions` with
   `status = 'active'` AND `owner_user_id = <their user id>`.
+- That session's `updated_at` is within the last `max_age_hours` (default
+  168 = 7 days). Stale "active" sessions don't auto-load — guards against
+  forgotten rows from months ago leaking back into chat.
 - The user has not opted out via `UserValves.enabled = False`.
 - The admin has not flipped the master kill switch (`Valves.enabled = False`).
 - The rm-memory MCP server replied within 800ms (configurable via
@@ -67,8 +70,10 @@ the most-recent one).
 ## How it talks to rm-memory
 
 Direct JSON-RPC over HTTP POST to `${mcp_url}` (default
-`http://rm-mcp-memory:3200/mcp` — the compose-internal hostname). Auth
-header `Authorization: Bearer ${mcp_token}` matching `MEMORY_GATEWAY_TOKEN`
+`http://rm-mcp-memory:3200/mcp` — the compose-internal hostname) using
+**`httpx.AsyncClient`** so the call doesn't block OpenWebUI's main asyncio
+loop on the timeout window. Auth header
+`Authorization: Bearer ${mcp_token}` matching `MEMORY_GATEWAY_TOKEN`
 in `docker-compose.rm.yaml`. Single tool call: `list_bopa_sessions` with
 empty arguments. Client-side filter on `owner_user_id == __user__.id`
 because BOPA sessions are project-scoped on read per
@@ -77,7 +82,8 @@ all sessions, the filter narrows to the caller's.
 
 A 30-second per-user in-memory cache (configurable via
 `Valves.cache_ttl_s`) prevents one chat with three rapid turns from
-hammering the MCP three times.
+hammering the MCP three times. Negative results (zero active sessions)
+are also cached so users without a BOPA workflow don't pay the RPC cost.
 
 ## Configuration
 
@@ -91,6 +97,7 @@ hammering the MCP three times.
 | `timeout_ms` | `800` | RPC timeout — no-op on miss |
 | `cache_ttl_s` | `30` | Per-user cache window |
 | `target_models` | `rm-assistent` | Comma-separated models to gate on |
+| `max_age_hours` | `168` | Sessions older than this (in hours) don't auto-load |
 | `enabled` | `true` | Master kill switch |
 
 ### Per-user UserValves
@@ -112,6 +119,7 @@ sessions where unrelated project context shouldn't leak.
 | `__user__` missing entirely | No injection (defensive). |
 | Malformed MCP response | Log warning; no injection. |
 | User has zero active sessions | No injection. |
+| User's only active session is older than `max_age_hours` | No injection. |
 | Different model selected (e.g. `rm-demografie-analist`) | No injection — and no MCP call (gated before RPC). |
 
 The filter wraps its inlet handler in a top-level try/except — any
@@ -151,8 +159,10 @@ block.
 .venv/bin/pytest rm-tools/tests/test_bopa_inlet_filter.py -v
 ```
 
-18 unit tests cover: phase-dependency math, owner-filter selection,
-most-recent-active selection, MCP failure paths (timeout, 5xx),
-UserValves opt-out, master kill switch, target-model gating, caching,
-empty-user defensive path, and message-list shapes (with/without an
-existing system message). MCP transport is mocked at `requests.post`.
+23 unit tests cover: phase-dependency math, owner-filter selection,
+most-recent-active selection, recency gate (stale rejected, in-window
+injected, naive vs aware ISO timestamps, missing/unparseable values),
+MCP failure paths (timeout, 5xx), UserValves opt-out, master kill
+switch, target-model gating, caching, empty-user defensive path, and
+message-list shapes (with/without an existing system message). MCP
+transport is mocked at the `httpx.AsyncClient` constructor.

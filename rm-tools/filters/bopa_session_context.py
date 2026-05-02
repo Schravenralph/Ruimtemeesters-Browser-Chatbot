@@ -7,16 +7,19 @@ license: MIT
 description: Inject the user's most-recent active BOPA session into the system prompt before the LLM call.
 """
 
-# `requests` is bundled with OpenWebUI (pinned in pyproject.toml). No
-# `requirements:` frontmatter is declared so the plugin loader skips the
+# `httpx` is bundled with OpenWebUI (pinned in pyproject.toml). Async client
+# is required: OpenWebUI awaits filter inlets on its main asyncio loop, so a
+# sync HTTP call would block other coroutines for the duration of the RPC.
+# No `requirements:` frontmatter is declared so the plugin loader skips the
 # pip-install step on every cold load.
 
+import datetime as dt
 import json
 import logging
 import time
 from typing import Any
 
-import requests
+import httpx
 from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
@@ -139,6 +142,14 @@ class Filter:
             default='rm-assistent',
             description='Comma-separated list of model IDs the filter should fire for. Other models are no-ops.',
         )
+        max_age_hours: int = Field(
+            default=168,
+            description=(
+                'Skip sessions whose updated_at is older than this many hours. '
+                'Default 7 days — guards against an "active" session from months '
+                'ago auto-loading because nobody closed it.'
+            ),
+        )
         enabled: bool = Field(
             default=True,
             description='Master kill switch (admin-level). Disable to short-circuit all injection.',
@@ -162,12 +173,36 @@ class Filter:
     def _now(self) -> float:
         return time.time()
 
-    def _fetch_active_session(self, user_id: str) -> tuple[dict | None, int]:
+    def _is_recent(self, session: dict) -> bool:
+        """True iff session.updated_at is within max_age_hours of now.
+
+        Sessions older than the cutoff don't auto-load — guards against a
+        forgotten "active" row from months ago leaking back into chat. A
+        missing or unparseable timestamp is treated as stale (False) so we
+        fail closed.
+        """
+        raw = session.get('updated_at') or ''
+        if not raw:
+            return False
+        try:
+            ts = dt.datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            return False
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=dt.UTC)
+        delta_h = (dt.datetime.now(dt.UTC) - ts).total_seconds() / 3600
+        return 0 <= delta_h <= self.valves.max_age_hours
+
+    async def _fetch_active_session(self, user_id: str) -> tuple[dict | None, int]:
         """Call list_bopa_sessions on rm-memory. Returns (chosen_session, others_count).
 
-        chosen_session is None when the user has zero active sessions or the
-        RPC failed. others_count is the number of additional active sessions
-        beyond the chosen one.
+        chosen_session is None when the user has zero active sessions, all
+        active sessions are stale (older than max_age_hours), or the RPC
+        failed. others_count is the number of additional in-window active
+        sessions beyond the chosen one.
+
+        Async because OpenWebUI awaits the inlet on its main asyncio loop —
+        a sync HTTP call would block other coroutines for the timeout window.
         """
         payload = {
             'jsonrpc': '2.0',
@@ -175,20 +210,19 @@ class Filter:
             'method': 'tools/call',
             'params': {'name': 'list_bopa_sessions', 'arguments': {}},
         }
-        headers: dict[str, str] = {'Content-Type': 'application/json'}
+        headers: dict[str, str] = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+        }
         if self.valves.mcp_token:
             headers['Authorization'] = f'Bearer {self.valves.mcp_token}'
 
         try:
-            resp = requests.post(
-                self.valves.mcp_url,
-                json=payload,
-                headers=headers,
-                timeout=self.valves.timeout_ms / 1000.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except (requests.exceptions.RequestException, ValueError) as e:
+            async with httpx.AsyncClient(timeout=self.valves.timeout_ms / 1000.0) as client:
+                resp = await client.post(self.valves.mcp_url, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+        except (httpx.HTTPError, ValueError) as e:
             log.warning('bopa_session_context: rm-memory RPC failed: %s', e)
             return None, 0
 
@@ -212,12 +246,17 @@ class Filter:
         if not isinstance(sessions, list):
             return None, 0
 
-        # Filter by owner + active status. BOPA sessions are project-scoped
-        # on read (memory-scoping-model spec §9), so client-side filter.
+        # Filter by owner + active status + recency. BOPA sessions are
+        # project-scoped on read (memory-scoping-model spec §9), so the
+        # owner narrowing happens client-side. Recency narrowing happens
+        # here too — a stale active session is treated as no session.
         active_owned = [
             s
             for s in sessions
-            if isinstance(s, dict) and s.get('owner_user_id') == user_id and s.get('status') == 'active'
+            if isinstance(s, dict)
+            and s.get('owner_user_id') == user_id
+            and s.get('status') == 'active'
+            and self._is_recent(s)
         ]
         if not active_owned:
             return None, 0
@@ -229,14 +268,14 @@ class Filter:
         active_owned.sort(key=sort_key, reverse=True)
         return active_owned[0], max(0, len(active_owned) - 1)
 
-    def _summary_for_user(self, user_id: str) -> str | None:
+    async def _summary_for_user(self, user_id: str) -> str | None:
         """Cached lookup. Returns None if no active session or on RPC failure."""
         if not user_id:
             return None
         cached = self._cache.get(user_id)
         if cached and cached[0] > self._now():
             return cached[1]
-        session, others = self._fetch_active_session(user_id)
+        session, others = await self._fetch_active_session(user_id)
         summary = _format_summary(session, others) if session else None
         self._cache[user_id] = (self._now() + self.valves.cache_ttl_s, summary)
         return summary
@@ -295,7 +334,7 @@ class Filter:
                 return body
             if not self._model_in_scope(body, __metadata__):
                 return body
-            summary = self._summary_for_user(user_id)
+            summary = await self._summary_for_user(user_id)
             if summary:
                 self._inject_summary(body, summary)
         except Exception as e:
