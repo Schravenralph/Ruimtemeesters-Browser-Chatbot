@@ -202,11 +202,11 @@ Richtlijnen:
                 'server:mcp:rm-aggregator',
                 'server:mcp:rm-memory',
             ],
-            # Inlet filter that injects the user's most-recent active BOPA
-            # session into the system prompt. Read-only, fail-open (chat
-            # proceeds unchanged if rm-memory is unreachable). v1 attaches
-            # only here; extending to specialists is a follow-up cycle.
-            'filterIds': ['bopa_session_context'],
+            # Inlet filters: BOPA session context (priority 10) lands first,
+            # memory recall (priority 11) lands second. Both read-only and
+            # fail-open — chat proceeds unchanged if rm-memory is unreachable.
+            # v1 attaches only here; extending to specialists is a follow-up.
+            'filterIds': ['bopa_session_context', 'memory_recall_context'],
         },
         'params': {
             'system': """Je bent de Ruimtemeesters AI Assistent — de centrale toegangspoort tot alle Ruimtemeesters applicaties en data.
@@ -221,6 +221,11 @@ Je hebt toegang tot alle tools:
 - Opdrachten Scanner: DAS/inhuur pipeline
 - Aggregator: cross-app zoeken over beleid + ruimtelijke + demografische data
 - Memory (rm-memory): sessiestate voor meerstapsworkflows zoals BOPA — bewaart per project_id en gemeente_code de fases en bevindingen
+
+Persoonlijk geheugen (rm-memory):
+- Roep `save_memory` aan wanneer de gebruiker een terugkerend feit, voorkeur of werkafspraak deelt die volgende sessies relevant blijft (bv. "ik werk vooral aan project X", "noem me bij m'n voornaam", "voor gemeente Y gebruik altijd bron Z"). Kies een korte, kebab-case `name` en zet `scope='user'` voor persoonlijke voorkeuren of `scope='project'` met `project_id` voor projectgebonden feiten.
+- Roep `save_memory` NIET aan voor losse vragen, eenmalige opdrachten, of berichten zonder duurzame waarde.
+- Het systeem injecteert al automatisch relevante memories bovenaan deze prompt (sectie "EERDER OPGESLAGEN MEMORIES"); roep `get_memory(name)` aan voor de volledige inhoud van een specifieke entry.
 
 BOPA-workflow (Buitenplanse Omgevingsplanactiviteit):
 - De adviseur kan een evaluatie starten via `/bopa-haalbaarheid` (Fase 1), `/bopa-strijdigheid` (Fase 2) of `/bopa-beleid` (Fase 3)
@@ -339,6 +344,17 @@ FILTERS = [
             'No-op when rm-memory is unreachable or the user has no active sessions.'
         ),
         'source_path': 'bopa_session_context.py',
+    },
+    {
+        'id': 'memory_recall_context',
+        'name': 'Memory Recall Context',
+        'description': (
+            "Inlet filter that calls recall_memory with the user's latest message "
+            'and injects matching memory descriptions into the system prompt. '
+            'Read-only, fail-open. No-op for queries shorter than 4 chars or when '
+            'no memories match.'
+        ),
+        'source_path': 'memory_recall_context.py',
     },
 ]
 
