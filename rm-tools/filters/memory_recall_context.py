@@ -147,8 +147,13 @@ class Filter:
     def _query_hash(self, query: str) -> str:
         return hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]
 
-    async def _recall(self, query: str) -> list[dict]:
+    async def _recall(self, query: str, user_id: str) -> list[dict]:
         """Call recall_memory on rm-memory. Returns matches list (possibly empty).
+
+        Results are filtered client-side by owner_user_id — the shared MCP
+        bearer token doesn't distinguish users, so the server may return
+        memories belonging to other users (same pattern as
+        bopa_session_context.py §249-260).
 
         Async because OpenWebUI awaits the inlet on its main asyncio loop —
         a sync HTTP call would block other coroutines for the timeout window.
@@ -193,7 +198,17 @@ class Filter:
         matches = blob.get('matches') if isinstance(blob, dict) else None
         if not isinstance(matches, list):
             return []
-        return [m for m in matches if isinstance(m, dict)]
+        return [
+            m for m in matches
+            if isinstance(m, dict) and m.get('owner_user_id') == user_id
+        ]
+
+    def _evict_expired(self) -> None:
+        """Remove all expired cache entries to prevent unbounded dict growth."""
+        now = self._now()
+        expired = [k for k, (expires, _) in self._cache.items() if expires <= now]
+        for k in expired:
+            del self._cache[k]
 
     async def _block_for_query(self, user_id: str, query: str) -> str | None:
         """Cached lookup. Returns None when there are no matches or on RPC failure."""
@@ -205,9 +220,10 @@ class Filter:
         cached = self._cache.get(key)
         if cached and cached[0] > self._now():
             return cached[1]
-        matches = await self._recall(query)
+        matches = await self._recall(query, user_id)
         block = _format_block(matches) if matches else None
         self._cache[key] = (self._now() + self.valves.cache_ttl_s, block)
+        self._evict_expired()
         return block
 
     def _model_id_from_metadata(self, body: dict, metadata: dict | None) -> str:
