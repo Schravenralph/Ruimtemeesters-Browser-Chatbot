@@ -43,9 +43,11 @@
 		isAllowedHostOrigin,
 		parseHostEnvelope,
 		sendToHost,
-		BRIDGE_PROTOCOL_VERSION,
-		type HostFeatureClickedPayload,
-		type HostVariantSwitchedPayload
+		BRIDGE_PROTOCOL_VERSION
+	} from '$lib/bridge/geoportaal';
+	import type {
+		HostFeatureClickedPayload,
+		HostVariantSwitchedPayload
 	} from '$lib/bridge/geoportaal';
 	import GeoportaalEmbedBanner from '$lib/components/embed/GeoportaalEmbedBanner.svelte';
 	import { getFileContentById } from '$lib/apis/files';
