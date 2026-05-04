@@ -83,6 +83,34 @@ export function isAllowedHostOrigin(origin: string): boolean {
 }
 
 /**
+ * Runtime payload-shape validators for the host events the layout
+ * actually consumes. `parseHostEnvelope` only checks the envelope
+ * itself; the `payload` is `unknown` and the consumer must narrow it.
+ * Without these checks, a malformed `host.variant.switched` payload
+ * would set `state.variantId` to `undefined`, which breaks the
+ * variant-mismatch guard for every subsequent message (the comparison
+ * `env.variantId !== undefined` is always true). Bugbot finding on
+ * PR #42.
+ */
+export function isHostFeatureClickedPayload(p: unknown): p is HostFeatureClickedPayload {
+	if (!p || typeof p !== 'object') return false;
+	const v = p as Record<string, unknown>;
+	if (typeof v.lon !== 'number' || typeof v.lat !== 'number') return false;
+	if (!v.feature || typeof v.feature !== 'object') return false;
+	const f = v.feature as Record<string, unknown>;
+	return typeof f.layerKey === 'string' && typeof f.featureId === 'string';
+}
+
+export function isHostVariantSwitchedPayload(p: unknown): p is HostVariantSwitchedPayload {
+	if (!p || typeof p !== 'object') return false;
+	const v = p as Record<string, unknown>;
+	if (typeof v.variantId !== 'string') return false;
+	// parentVariantId is `string | null` — present in payload, but the
+	// nullable string is the only awkward case.
+	return v.parentVariantId === null || typeof v.parentVariantId === 'string';
+}
+
+/**
  * Validate an incoming MessageEvent's data as a Geoportaal-PRD-0023
  * envelope from the host side. Returns the parsed envelope or `null`.
  *
