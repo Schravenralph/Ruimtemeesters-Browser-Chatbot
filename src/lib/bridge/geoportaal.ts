@@ -73,6 +73,7 @@ export interface IframeErrorPayload {
 // the host moves.
 const ALLOWED_HOST_ORIGINS = [
 	'https://geoportaal.datameesters.nl',
+	'https://digitaltwin.datameesters.nl',
 	'https://geoportaal-staging.datameesters.nl',
 	'http://localhost:3000',
 	'http://localhost:5173'
