@@ -34,11 +34,15 @@ if [ -z "$ADMIN_USER_ID" ]; then
   fi
 fi
 
-# Decide expectation. `auto` reads OPENROUTER_API_KEY from the container env
-# the same way seed-gemini-connection.sh does.
+# Decide expectation. `auto` extracts the OpenRouter key from the container's
+# OPENAI_API_KEYS — a semicolon-delimited string built by docker-compose.rm.yaml
+# (position 1 = Gemini, position 2 = OpenAI, position 3 = OpenRouter). The bare
+# OPENROUTER_API_KEY env var does NOT exist inside the container; only
+# OPENAI_API_KEYS does. seed-gemini-connection.sh uses the same `cut -d';' -f3`.
 case "$EXPECT_OPENROUTER" in
   auto)
-    OR_KEY=$(docker exec "$APP_CONTAINER" sh -c 'printf "%s" "$OPENROUTER_API_KEY"' 2>/dev/null || true)
+    KEYS_RAW=$(docker exec "$APP_CONTAINER" sh -c 'printf "%s" "$OPENAI_API_KEYS"' 2>/dev/null || true)
+    OR_KEY=$(printf "%s" "$KEYS_RAW" | cut -d';' -f3)
     if [ -n "$OR_KEY" ]; then EXPECT_OPENROUTER=yes; else EXPECT_OPENROUTER=no; fi
     ;;
   yes|no) ;;
