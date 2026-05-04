@@ -214,6 +214,7 @@ Je hebt toegang tot alle tools:
 - Memory (rm-memory): sessiestate voor meerstapsworkflows zoals BOPA — bewaart per project_id en gemeente_code de fases en bevindingen
 
 BOPA-workflow (Buitenplanse Omgevingsplanactiviteit):
+- Nieuwe adviseur die de werkwijze niet kent? Verwijs naar `/bopa-help` voor een korte uitleg.
 - De adviseur kan een evaluatie starten via `/bopa-haalbaarheid` (Fase 1), `/bopa-strijdigheid` (Fase 2) of `/bopa-beleid` (Fase 3)
 - Volg de skill in `.claude/skills/bopa/SKILL.md`: geocode → list/create_bopa_session → fase-tools → update_bopa_session
 - Respecteer de fase-prerequisites die de memory-server afdwingt (Fase 2/3 vereisen Fase 1, etc.)
@@ -269,6 +270,33 @@ PROMPTS = [
         'command': 'help',
         'name': 'Help',
         'content': "Toon een overzicht van alle beschikbare commando's en wat de Ruimtemeesters AI Assistent kan doen. Organiseer per categorie: beleid, demografie, ruimtelijk, sales, en opdrachten.",
+    },
+    {
+        'command': 'bopa-help',
+        'name': 'BOPA — Hoe werkt het?',
+        'content': (
+            'Leg in het Nederlands en in maximaal 250 woorden uit wat een BOPA-evaluatie is en hoe '
+            'de adviseur er een doet via deze chat. Geef geen tool-calls; dit is puur een uitleg. '
+            'Structuur:\n\n'
+            '1) Wat is een BOPA? — Buitenplanse Omgevingsplanactiviteit onder de Omgevingswet, een '
+            'vergunning voor een initiatief dat afwijkt van het omgevingsplan.\n'
+            '2) De 6 fasen — Fase 1 Haalbaarheid (kan dit hier?), Fase 2 Strijdigheid (botst dit met '
+            'het omgevingsplan?), Fase 3 Beleid (welke beleidsstukken zijn relevant?), Fase 4 '
+            'Omgevingsaspecten (lucht, geluid, bodem, …), Fase 5 Onderbouwing (juridische motivering), '
+            'Fase 6 Toetsing (eindafweging). Fasen 2/3 vereisen Fase 1; 4/5 vereisen 1+2+3; 6 vereist '
+            'alle voorgaande.\n'
+            "3) Slash-commando's — vermeld dat de adviseur kan starten met `/bopa-haalbaarheid` (Fase 1), "
+            'door kan met `/bopa-strijdigheid` (Fase 2) en `/bopa-beleid` (Fase 3), en `/bopa-status` '
+            "kan gebruiken voor een overzicht van lopende sessies. Fase 4–6 commando's zijn nog niet "
+            'gepubliceerd (MCP-tools in de wacht).\n'
+            '4) Automatische context — meld dat als de adviseur al een lopende BOPA-sessie heeft, '
+            '`rm-assistent` die automatisch inlaadt aan het begin van elke chat (via de '
+            'bopa_session_context inlet filter), zodat ze niet steeds `/bopa-status` hoeven te typen.\n'
+            '5) Privacy — een korte regel: per-user opt-out is mogelijk via instellingen → filters → '
+            'BOPA Session Context.\n\n'
+            'Sluit af met de suggestie: "Wil je beginnen? Typ `/bopa-haalbaarheid` met het adres van '
+            'je project."'
+        ),
     },
     {
         'command': 'bopa-status',
