@@ -45,10 +45,6 @@
 		sendToHost,
 		BRIDGE_PROTOCOL_VERSION
 	} from '$lib/bridge/geoportaal';
-	import type {
-		HostFeatureClickedPayload,
-		HostVariantSwitchedPayload
-	} from '$lib/bridge/geoportaal';
 	import GeoportaalEmbedBanner from '$lib/components/embed/GeoportaalEmbedBanner.svelte';
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
@@ -867,13 +863,15 @@
 			if (env.type === 'host.feature.clicked') {
 				geoportaalEmbed.update((s) => ({
 					...s,
-					lastFeature: env.payload as HostFeatureClickedPayload
+					lastFeature: env.payload
 				}));
 				return;
 			}
 			if (env.type === 'host.variant.switched') {
-				const payload = env.payload as HostVariantSwitchedPayload;
-				geoportaalEmbed.update((s) => ({ ...s, variantId: payload.variantId }));
+				geoportaalEmbed.update((s) => ({
+					...s,
+					variantId: env.payload.variantId
+				}));
 				return;
 			}
 			// Unknown host.* events are silently ignored (forward-compat).
