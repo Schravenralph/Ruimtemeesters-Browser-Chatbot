@@ -31,15 +31,13 @@
 </script>
 
 {#if $geoportaalEmbed.active}
-	<div
-		class="geoportaal-embed-banner"
-		role="region"
-		aria-label="Geoportaal embed-context"
-	>
+	<div class="geoportaal-embed-banner" role="region" aria-label="Geoportaal embed-context">
 		<div class="row">
 			<span class="label">
 				🗺️ Geoportaal embed
-				<span class="muted">— project {$geoportaalEmbed.projectId}, variant {$geoportaalEmbed.variantId}</span>
+				<span class="muted"
+					>— project {$geoportaalEmbed.projectId}, variant {$geoportaalEmbed.variantId}</span
+				>
 			</span>
 			<span class="state state-{$geoportaalEmbed.bridgeState}">
 				{#if $geoportaalEmbed.bridgeState === 'ready'}

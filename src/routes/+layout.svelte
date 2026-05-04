@@ -789,7 +789,11 @@
 	const RM_GEOPORTAAL_ORIGINS = [
 		'https://geoportaal.datameesters.nl',
 		'https://geoportaal-staging.datameesters.nl',
-		'http://localhost:3000'
+		'http://localhost:3000',
+		// Match `ALLOWED_HOST_ORIGINS` in `$lib/bridge/geoportaal.ts` so the
+		// outer message-gate doesn't depend on Databank's list happening
+		// to also include localhost:5173 (Bugbot finding on PR #42).
+		'http://localhost:5173'
 	];
 	const ALLOWED_MESSAGE_ORIGINS = [
 		...OPENWEBUI_MESSAGE_ORIGINS,
@@ -842,13 +846,17 @@
 			if (!env) return;
 			// Drop messages addressed to a different project than the iframe
 			// was instantiated for — defends against host bugs that could
-			// cross-talk between project tabs.
+			// cross-talk between project tabs. Variant-mismatch is exempt
+			// for `host.variant.switched`: that envelope by definition
+			// carries the NEW variantId while our store still has the OLD
+			// one, so guarding on variantId would silently drop the very
+			// event meant to update the store (Bugbot finding on PR #42).
 			const state = $geoportaalEmbed;
-			if (
-				state.active &&
-				(env.projectId !== state.projectId || env.variantId !== state.variantId)
-			) {
-				return;
+			if (state.active) {
+				if (env.projectId !== state.projectId) return;
+				if (env.type !== 'host.variant.switched' && env.variantId !== state.variantId) {
+					return;
+				}
 			}
 			if (env.type === 'host.ready') {
 				geoportaalEmbed.update((s) => ({ ...s, bridgeState: 'ready' }));
