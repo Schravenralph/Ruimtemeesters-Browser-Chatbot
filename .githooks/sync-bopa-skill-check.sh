@@ -7,7 +7,7 @@ set -e
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 MIRROR_PATH=".claude/skills/bopa/SKILL.md"
 
-if ! git diff --cached --name-only | grep -qx "$MIRROR_PATH"; then
+if ! git diff --cached --name-only | grep -Fqx "$MIRROR_PATH"; then
   exit 0
 fi
 
