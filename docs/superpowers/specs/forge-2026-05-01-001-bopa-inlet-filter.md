@@ -127,14 +127,14 @@ we have UX evidence the injection is helpful and not noisy.
 
 ### Failure modes
 
-| Failure | Behavior |
-|---------|----------|
-| MCP timeout (>800ms) | Log warning, no injection, chat proceeds |
-| MCP 5xx / connection refused | Log warning, no injection |
-| Empty user (e.g. anonymous) | No injection |
-| `__user__` missing | No injection (defensive) |
-| `UserValves.enabled = False` | No injection |
-| No active sessions for user | No injection |
+| Failure                      | Behavior                                 |
+| ---------------------------- | ---------------------------------------- |
+| MCP timeout (>800ms)         | Log warning, no injection, chat proceeds |
+| MCP 5xx / connection refused | Log warning, no injection                |
+| Empty user (e.g. anonymous)  | No injection                             |
+| `__user__` missing           | No injection (defensive)                 |
+| `UserValves.enabled = False` | No injection                             |
+| No active sessions for user  | No injection                             |
 
 ## Not doing
 
@@ -185,13 +185,13 @@ we have UX evidence the injection is helpful and not noisy.
 
 ## Estimated breakdown
 
-| Step | Time |
-|------|------|
-| Filter source + Valves + caching | 25 min |
+| Step                                                                                 | Time   |
+| ------------------------------------------------------------------------------------ | ------ |
+| Filter source + Valves + caching                                                     | 25 min |
 | Registrar wiring (`FILTERS` list + `register_filter` POST helper + `meta.filterIds`) | 15 min |
-| Unit tests (6 cases) | 15 min |
-| Docs page | 10 min |
-| Local smoke + tweaks | 15 min |
+| Unit tests (6 cases)                                                                 | 15 min |
+| Docs page                                                                            | 10 min |
+| Local smoke + tweaks                                                                 | 15 min |
 
 Total: ~80 minutes. Sits inside the medium-cycle budget; no part is
 research-shaped.

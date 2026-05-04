@@ -57,9 +57,9 @@ of a fake command.
 
 ## How it relates to `/bopa-status`
 
-| Trigger | Mechanism |
-|---------|-----------|
-| Every chat with `rm-assistent` | This filter (automatic, silent) |
+| Trigger                          | Mechanism                                                              |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| Every chat with `rm-assistent`   | This filter (automatic, silent)                                        |
 | Explicit query for full overview | `/bopa-status` slash prompt (calls `list_bopa_sessions` via the agent) |
 
 The filter pre-loads context so the agent doesn't need to call
@@ -89,22 +89,22 @@ are also cached so users without a BOPA workflow don't pay the RPC cost.
 
 ### Admin Valves (set per-deployment, not per-user)
 
-| Valve | Default | Purpose |
-|-------|---------|---------|
-| `priority` | `10` | Filter execution order (lower = earlier) |
-| `mcp_url` | `http://rm-mcp-memory:3200/mcp` | rm-memory JSON-RPC endpoint |
-| `mcp_token` | `""` | Bearer token (matches `MEMORY_GATEWAY_TOKEN`) |
-| `timeout_ms` | `800` | RPC timeout — no-op on miss |
-| `cache_ttl_s` | `30` | Per-user cache window |
-| `target_models` | `rm-assistent` | Comma-separated models to gate on |
-| `max_age_hours` | `168` | Sessions older than this (in hours) don't auto-load |
-| `enabled` | `true` | Master kill switch |
+| Valve           | Default                         | Purpose                                             |
+| --------------- | ------------------------------- | --------------------------------------------------- |
+| `priority`      | `10`                            | Filter execution order (lower = earlier)            |
+| `mcp_url`       | `http://rm-mcp-memory:3200/mcp` | rm-memory JSON-RPC endpoint                         |
+| `mcp_token`     | `""`                            | Bearer token (matches `MEMORY_GATEWAY_TOKEN`)       |
+| `timeout_ms`    | `800`                           | RPC timeout — no-op on miss                         |
+| `cache_ttl_s`   | `30`                            | Per-user cache window                               |
+| `target_models` | `rm-assistent`                  | Comma-separated models to gate on                   |
+| `max_age_hours` | `168`                           | Sessions older than this (in hours) don't auto-load |
+| `enabled`       | `true`                          | Master kill switch                                  |
 
 ### Per-user UserValves
 
-| Valve | Default | Purpose |
-|-------|---------|---------|
-| `enabled` | `true` | Per-user opt-out (settings → personalization → filters) |
+| Valve     | Default | Purpose                                                 |
+| --------- | ------- | ------------------------------------------------------- |
+| `enabled` | `true`  | Per-user opt-out (settings → personalization → filters) |
 
 A user who flips `enabled = false` saves one MCP RPC per chat turn and
 keeps their BOPA state out of the system prompt — useful for screen-share
@@ -112,15 +112,15 @@ sessions where unrelated project context shouldn't leak.
 
 ## Failure modes
 
-| Failure | Behavior |
-|---------|----------|
-| MCP timeout / 5xx / connection refused | Log warning; return body unchanged. Chat works. |
-| Empty user (anonymous) | No injection. |
-| `__user__` missing entirely | No injection (defensive). |
-| Malformed MCP response | Log warning; no injection. |
-| User has zero active sessions | No injection. |
-| User's only active session is older than `max_age_hours` | No injection. |
-| Different model selected (e.g. `rm-demografie-analist`) | No injection — and no MCP call (gated before RPC). |
+| Failure                                                  | Behavior                                           |
+| -------------------------------------------------------- | -------------------------------------------------- |
+| MCP timeout / 5xx / connection refused                   | Log warning; return body unchanged. Chat works.    |
+| Empty user (anonymous)                                   | No injection.                                      |
+| `__user__` missing entirely                              | No injection (defensive).                          |
+| Malformed MCP response                                   | Log warning; no injection.                         |
+| User has zero active sessions                            | No injection.                                      |
+| User's only active session is older than `max_age_hours` | No injection.                                      |
+| Different model selected (e.g. `rm-demografie-analist`)  | No injection — and no MCP call (gated before RPC). |
 
 The filter wraps its inlet handler in a top-level try/except — any
 unexpected error is logged and the body is returned unchanged. **The chat
