@@ -312,3 +312,6 @@ cypress/screenshots
 
 
 /static/*
+# Mirrored from external canonical sources — formatting follows upstream,
+# not this project's prettier config (see scripts/sync-bopa-skill.sh).
+.claude/skills/

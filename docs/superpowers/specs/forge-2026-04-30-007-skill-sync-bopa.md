@@ -46,6 +46,7 @@ Default source path: `../Ruimtemeesters-MCP-Servers/packages/memory/skills/bopa.
 (sibling-repo convention used elsewhere in the org).
 
 If the source path doesn't exist:
+
 - **default mode**: error, exit 2 ("source not found, check out
   Ruimtemeesters-MCP-Servers as sibling")
 - **`--check` mode**: print a `SKIP` notice on stderr, exit 0 (so
@@ -62,6 +63,7 @@ prints a one-line summary + the unified diff to stderr.
 ### `.githooks/sync-bopa-skill-check.sh`
 
 Pre-commit hook fragment that:
+
 1. Runs only when `.claude/skills/bopa/SKILL.md` is staged.
 2. Calls `scripts/sync-bopa-skill.sh --check`.
 3. Inherits the script's "skip if sibling missing" semantics.
@@ -75,15 +77,15 @@ Re-copy the canonical 268-line content into the mirror file. Verify
 
 ## 4. Success criteria
 
-| Criterion                                                                                         | Threshold       | How measured                                              |
-| ------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------- |
-| Sync script exists, executable                                                                    | yes             | `[ -x scripts/sync-bopa-skill.sh ]`                       |
-| Bash syntax check                                                                                 | pass            | `bash -n scripts/sync-bopa-skill.sh`                      |
-| `scripts/sync-bopa-skill.sh --check` against current state exits 0                                | yes             | run after content sync                                    |
-| Pre-commit hook fragment exists, executable                                                       | yes             | `[ -x .githooks/sync-bopa-skill-check.sh ]`               |
-| Pre-commit dispatcher invokes it                                                                  | yes             | grep in `.githooks/pre-commit`                            |
-| Mirror file size after sync                                                                       | matches source  | `cmp -s` source mirror                                    |
-| Skip-when-sibling-missing path                                                                    | exits 0, warns  | `BOPA_SKILL_SOURCE=/nonexistent scripts/sync-bopa-skill.sh --check` |
+| Criterion                                                          | Threshold      | How measured                                                        |
+| ------------------------------------------------------------------ | -------------- | ------------------------------------------------------------------- |
+| Sync script exists, executable                                     | yes            | `[ -x scripts/sync-bopa-skill.sh ]`                                 |
+| Bash syntax check                                                  | pass           | `bash -n scripts/sync-bopa-skill.sh`                                |
+| `scripts/sync-bopa-skill.sh --check` against current state exits 0 | yes            | run after content sync                                              |
+| Pre-commit hook fragment exists, executable                        | yes            | `[ -x .githooks/sync-bopa-skill-check.sh ]`                         |
+| Pre-commit dispatcher invokes it                                   | yes            | grep in `.githooks/pre-commit`                                      |
+| Mirror file size after sync                                        | matches source | `cmp -s` source mirror                                              |
+| Skip-when-sibling-missing path                                     | exits 0, warns | `BOPA_SKILL_SOURCE=/nonexistent scripts/sync-bopa-skill.sh --check` |
 
 ## 5. Validation
 
