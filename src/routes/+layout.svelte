@@ -788,6 +788,7 @@
 	// `protocolVersion: 1` with a typed `host.*` discriminator.
 	const RM_GEOPORTAAL_ORIGINS = [
 		'https://geoportaal.datameesters.nl',
+		'https://digitaltwin.datameesters.nl',
 		'https://geoportaal-staging.datameesters.nl',
 		'http://localhost:3000',
 		// Match `ALLOWED_HOST_ORIGINS` in `$lib/bridge/geoportaal.ts` so the
