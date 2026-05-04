@@ -945,8 +945,13 @@
 
 				files = [...files];
 			} catch (e) {
-				files = files.filter((f) => f.name !== fileItem.url);
-				toast.error(`${e}`);
+				// Flip the chip to an inline error state instead of removing the
+				// file from the list. The user sees what failed, can read the
+				// reason via the chip's tooltip, and can dismiss with X. Toast
+				// is suppressed because the inline state already conveys it.
+				fileItem.status = 'error';
+				fileItem.error = typeof e === 'string' ? e : (e?.message ?? `${e}`);
+				files = [...files];
 			}
 		}
 	};
@@ -1849,8 +1854,9 @@
 		chatFiles.push(
 			..._files.filter(
 				(item) =>
-					['doc', 'text', 'note', 'chat', 'folder', 'collection'].includes(item.type) ||
-					(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/'))
+					item.status !== 'error' &&
+					(['doc', 'text', 'note', 'chat', 'folder', 'collection'].includes(item.type) ||
+						(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/')))
 			)
 		);
 		chatFiles = chatFiles.filter(

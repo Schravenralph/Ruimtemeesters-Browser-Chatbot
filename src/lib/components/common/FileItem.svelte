@@ -22,6 +22,12 @@
 	export let dismissible = false;
 	export let modal = false;
 	export let loading = false;
+	// `error` and `errorMessage` render an inline failure state instead of the
+	// regular icon/spinner. Set by chat-attachment chips when their underlying
+	// upload/process call rejects, so the user sees the failure inline rather
+	// than a vanishing chip + transient toast.
+	export let error = false;
+	export let errorMessage: string = '';
 
 	export let item = null;
 	export let edit = false;
@@ -78,9 +84,31 @@
 >
 	{#if !small}
 		<div
-			class="size-10 shrink-0 flex justify-center items-center bg-black/20 dark:bg-white/10 text-white rounded-xl"
+			class="size-10 shrink-0 flex justify-center items-center {error
+				? 'bg-red-500/20 dark:bg-red-500/30 text-red-700 dark:text-red-300'
+				: 'bg-black/20 dark:bg-white/10 text-white'} rounded-xl"
 		>
-			{#if !loading}
+			{#if error}
+				<Tooltip
+					content={errorMessage || $i18n.t('Failed to attach. Click the X to dismiss.')}
+					placement="top"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						aria-hidden="true"
+						aria-label={$i18n.t('Attachment failed')}
+						class="size-4.5"
+					>
+						<path
+							fill-rule="evenodd"
+							d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+				</Tooltip>
+			{:else if !loading}
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 24 24"
@@ -103,7 +131,27 @@
 		</div>
 	{:else}
 		<div class="pl-1.5">
-			{#if !loading}
+			{#if error}
+				<Tooltip
+					content={errorMessage || $i18n.t('Failed to attach. Click the X to dismiss.')}
+					placement="top"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						aria-hidden="true"
+						aria-label={$i18n.t('Attachment failed')}
+						class="size-4 text-red-600 dark:text-red-400"
+					>
+						<path
+							fill-rule="evenodd"
+							d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+				</Tooltip>
+			{:else if !loading}
 				<Tooltip
 					content={type === 'collection'
 						? $i18n.t('Collection')

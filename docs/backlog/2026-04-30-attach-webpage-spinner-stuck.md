@@ -1,6 +1,6 @@
 ---
 date: 2026-04-30
-status: in-progress
+status: resolved
 severity: high
 reporter: user-report
 related: chat https://chatbot.datameesters.nl/s/07d2a810-0730-4ab5-bd4e-85df58eda51a
@@ -8,7 +8,10 @@ related: chat https://chatbot.datameesters.nl/s/07d2a810-0730-4ab5-bd4e-85df58ed
 
 # Attach-webpage spinner stuck on `processWeb` failure
 
-**Resolved by:** _(pending PR — fixes catch-handler crash that masks every web-upload error)_
+**Resolved by:**
+
+- PR #36 — fixed the catch-handler crash (`url` → `fileItem.url`) that masked every web-upload error.
+- PR (forge cycle 3, 2026-05-04) — addressed the "Defensive (deferred)" section: inline error chip via `FileItem.svelte` + `AbortSignal.timeout(60_000)` on `processWeb`. Server-side timeout in `get_content_from_url` is still open as a follow-up.
 
 ## Reporter quote
 
