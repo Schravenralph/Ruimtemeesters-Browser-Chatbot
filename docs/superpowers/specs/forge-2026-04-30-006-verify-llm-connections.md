@@ -85,13 +85,13 @@ silent on success, prints a one-line summary on failure.
 
 ### Pass thresholds per criterion
 
-| ID  | Criterion                         | Pass when                                                                       |
-| --- | --------------------------------- | ------------------------------------------------------------------------------- |
-| A   | `ENABLE_OPENAI_API` is true       | exact `True`                                                                    |
-| B   | Number of base URLs               | `==3` when `expect_openrouter=true`, `==2` when `false`                         |
-| C   | Gemini connection (idx `1`)       | `prefix_id=='gemini'`, `enable==true`, `model_ids` length `==5`                 |
-| D   | OpenRouter connection (idx `2`)   | only when `expect_openrouter`: `prefix_id=='openrouter'`, `enable==true`, `≥3` model ids |
-| E   | OpenAI placeholder (idx `0`)      | base URL is `https://api.openai.com/v1`, `enable==false`                        |
+| ID  | Criterion                       | Pass when                                                                                |
+| --- | ------------------------------- | ---------------------------------------------------------------------------------------- |
+| A   | `ENABLE_OPENAI_API` is true     | exact `True`                                                                             |
+| B   | Number of base URLs             | `==3` when `expect_openrouter=true`, `==2` when `false`                                  |
+| C   | Gemini connection (idx `1`)     | `prefix_id=='gemini'`, `enable==true`, `model_ids` length `==5`                          |
+| D   | OpenRouter connection (idx `2`) | only when `expect_openrouter`: `prefix_id=='openrouter'`, `enable==true`, `≥3` model ids |
+| E   | OpenAI placeholder (idx `0`)    | base URL is `https://api.openai.com/v1`, `enable==false`                                 |
 
 The thresholds match what `seed-gemini-connection.sh` writes today.
 
@@ -107,13 +107,13 @@ The thresholds match what `seed-gemini-connection.sh` writes today.
 
 ## 5. Success criteria
 
-| Criterion                                                                                                               | Threshold            | How measured                                                |
-| ----------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------- |
-| Script exists and is executable                                                                                         | yes                  | `[ -x scripts/verify-llm-connections.sh ]`                  |
-| Bash syntax check                                                                                                       | pass                 | `bash -n scripts/verify-llm-connections.sh`                 |
-| Run against a freshly-seeded local stack (3 connections)                                                                | `all_pass=true`      | `scripts/seed-gemini-connection.sh && scripts/verify-llm-connections.sh \| jq .all_pass` |
-| Stale-shape detection — manually POST a 2-entry config to `/openai/config/update`, then re-run with `EXPECT_OPENROUTER=yes` | `all_pass=false`, exit 1 | regression check                                            |
-| Documented in `scripts/seed-gemini-connection.sh` header (one-liner pointer)                                            | yes                  | header mentions `verify-llm-connections.sh`                 |
+| Criterion                                                                                                                   | Threshold                | How measured                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
+| Script exists and is executable                                                                                             | yes                      | `[ -x scripts/verify-llm-connections.sh ]`                                               |
+| Bash syntax check                                                                                                           | pass                     | `bash -n scripts/verify-llm-connections.sh`                                              |
+| Run against a freshly-seeded local stack (3 connections)                                                                    | `all_pass=true`          | `scripts/seed-gemini-connection.sh && scripts/verify-llm-connections.sh \| jq .all_pass` |
+| Stale-shape detection — manually POST a 2-entry config to `/openai/config/update`, then re-run with `EXPECT_OPENROUTER=yes` | `all_pass=false`, exit 1 | regression check                                                                         |
+| Documented in `scripts/seed-gemini-connection.sh` header (one-liner pointer)                                                | yes                      | header mentions `verify-llm-connections.sh`                                              |
 
 ## 6. Validation
 
