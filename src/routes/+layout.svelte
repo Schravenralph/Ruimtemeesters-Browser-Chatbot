@@ -38,6 +38,16 @@
 		pyodideWorker
 	} from '$lib/stores';
 	import { embedContext } from '$lib/stores/embedContext';
+	import { geoportaalEmbed } from '$lib/stores/geoportaalEmbed';
+	import {
+		isAllowedHostOrigin,
+		isHostFeatureClickedPayload,
+		isHostVariantSwitchedPayload,
+		parseHostEnvelope,
+		sendToHost,
+		BRIDGE_PROTOCOL_VERSION
+	} from '$lib/bridge/geoportaal';
+	import GeoportaalEmbedBanner from '$lib/components/embed/GeoportaalEmbedBanner.svelte';
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -771,7 +781,25 @@
 		'http://localhost:5173',
 		'http://localhost:5050'
 	];
-	const ALLOWED_MESSAGE_ORIGINS = [...OPENWEBUI_MESSAGE_ORIGINS, ...RM_DATABANK_ORIGINS];
+	// Geoportaal uses the typed PRD-0023 envelope protocol; the host
+	// origins live alongside Databank's because the chatbot can be
+	// iframed by either app. Detection happens on `event.data` shape
+	// — Databank uses `type: 'rm:chatbot:context'`, Geoportaal uses
+	// `protocolVersion: 1` with a typed `host.*` discriminator.
+	const RM_GEOPORTAAL_ORIGINS = [
+		'https://geoportaal.datameesters.nl',
+		'https://geoportaal-staging.datameesters.nl',
+		'http://localhost:3000',
+		// Match `ALLOWED_HOST_ORIGINS` in `$lib/bridge/geoportaal.ts` so the
+		// outer message-gate doesn't depend on Databank's list happening
+		// to also include localhost:5173 (Bugbot finding on PR #42).
+		'http://localhost:5173'
+	];
+	const ALLOWED_MESSAGE_ORIGINS = [
+		...OPENWEBUI_MESSAGE_ORIGINS,
+		...RM_DATABANK_ORIGINS,
+		...RM_GEOPORTAAL_ORIGINS
+	];
 
 	const windowMessageEventHandler = async (event) => {
 		if (!ALLOWED_MESSAGE_ORIGINS.includes(event.origin)) {
@@ -805,6 +833,54 @@
 				});
 			}
 		}
+
+		// Ruimtemeesters Geoportaal — typed PRD-0023 envelope protocol.
+		// We accept only `source: 'host'` envelopes (no spoofed iframe.*
+		// from a host origin). The parser also enforces protocolVersion,
+		// projectId/variantId presence, and payload-shape.
+		if (
+			event.data?.protocolVersion === BRIDGE_PROTOCOL_VERSION &&
+			isAllowedHostOrigin(event.origin)
+		) {
+			const env = parseHostEnvelope(event.data);
+			if (!env) return;
+			// Drop the message entirely when we haven't detected a live
+			// Geoportaal embed (referrer-detect failed, or the chatbot is
+			// running standalone). Without this gate the handlers below
+			// would still mutate the store with `state.active === false`
+			// and `projectId === NaN`, corrupting future embed-detection.
+			// Bugbot finding on PR #42 (Missing active-state guard).
+			const state = $geoportaalEmbed;
+			if (!state.active) return;
+			// Drop messages addressed to a different project than the iframe
+			// was instantiated for — defends against host bugs that could
+			// cross-talk between project tabs. Variant-mismatch is exempt
+			// for `host.variant.switched`: that envelope by definition
+			// carries the NEW variantId while our store still has the OLD
+			// one, so guarding on variantId would silently drop the very
+			// event meant to update the store.
+			if (env.projectId !== state.projectId) return;
+			if (env.type !== 'host.variant.switched' && env.variantId !== state.variantId) {
+				return;
+			}
+			if (env.type === 'host.ready') {
+				geoportaalEmbed.update((s) => ({ ...s, bridgeState: 'ready' }));
+				return;
+			}
+			if (env.type === 'host.feature.clicked') {
+				if (!isHostFeatureClickedPayload(env.payload)) return;
+				const payload = env.payload;
+				geoportaalEmbed.update((s) => ({ ...s, lastFeature: payload }));
+				return;
+			}
+			if (env.type === 'host.variant.switched') {
+				if (!isHostVariantSwitchedPayload(env.payload)) return;
+				const payload = env.payload;
+				geoportaalEmbed.update((s) => ({ ...s, variantId: payload.variantId }));
+				return;
+			}
+			// Unknown host.* events are silently ignored (forward-compat).
+		}
 	};
 
 	onMount(async () => {
@@ -818,6 +894,40 @@
 				window.parent.postMessage({ type: 'rm:chatbot:ready' }, '*');
 			} catch (e) {
 				console.debug('rm:chatbot:ready postMessage failed:', e);
+			}
+		}
+
+		// Ruimtemeesters Geoportaal embed-detection — see ADR-0021 in the
+		// Geoportaal repo. Markers: URL has ?projectId, we're in iframe,
+		// referrer is from a Geoportaal origin. When all three line up,
+		// populate the embed-store and emit `iframe.ready` per PRD-0023.
+		if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+			const params = new URLSearchParams(window.location.search);
+			const projectIdRaw = params.get('projectId');
+			if (projectIdRaw) {
+				const projectId = Number.parseInt(projectIdRaw, 10);
+				const variantId = params.get('variantId') ?? 'baseline';
+				let hostOrigin = '';
+				try {
+					hostOrigin = new URL(document.referrer || '').origin;
+				} catch {
+					hostOrigin = '';
+				}
+				if (Number.isFinite(projectId) && projectId > 0 && isAllowedHostOrigin(hostOrigin)) {
+					geoportaalEmbed.set({
+						active: true,
+						projectId,
+						variantId,
+						hostOrigin,
+						bridgeState: 'pending',
+						lastFeature: null
+					});
+					sendToHost(
+						'iframe.ready',
+						{ iframeVersion: '1.0.0' },
+						{ projectId, variantId, hostOrigin }
+					);
+				}
 			}
 		}
 
@@ -1125,6 +1235,12 @@
 			</button>
 		</div>
 	{/if}
+
+	<!-- Geoportaal embed-banner — only renders when this SPA is iframed
+	     inside Geoportaal (`?projectId=…` URL marker + Geoportaal-allowlisted
+	     referrer). Standalone use is unaffected; banner stays hidden. -->
+	<GeoportaalEmbedBanner />
+
 	<div class:pt-9={$embedContext}>
 		{#if $isApp}
 			<div class="flex flex-row h-screen">
