@@ -10,11 +10,11 @@ until explicit go-ahead; everything below is local-only.
 
 ## Shipped Features
 
-| #   | Feature                                                              | Branch                                       | Commits | Status   | Size |
-| --- | -------------------------------------------------------------------- | -------------------------------------------- | ------- | -------- | ---- |
-| 1   | `bopa_session_context` inlet filter (auto-injects active BOPA on rm-assistent) | `forge/20260501-bopa-inlet-filter`     | 2       | unpushed | M    |
-| 1a  | salvage: `httpx.AsyncClient` + `max_age_hours` valve                 | (stacked on cycle 1)                         | 1       | unpushed | refactor |
-| 2   | `/bopa-help` slash prompt + system-prompt entry-point reference      | `forge/20260501-bopa-help-slash-prompt`      | 1       | unpushed | XS   |
+| #   | Feature                                                                        | Branch                                  | Commits | Status   | Size     |
+| --- | ------------------------------------------------------------------------------ | --------------------------------------- | ------- | -------- | -------- |
+| 1   | `bopa_session_context` inlet filter (auto-injects active BOPA on rm-assistent) | `forge/20260501-bopa-inlet-filter`      | 2       | unpushed | M        |
+| 1a  | salvage: `httpx.AsyncClient` + `max_age_hours` valve                           | (stacked on cycle 1)                    | 1       | unpushed | refactor |
+| 2   | `/bopa-help` slash prompt + system-prompt entry-point reference                | `forge/20260501-bopa-help-slash-prompt` | 1       | unpushed | XS       |
 
 ## Branch hygiene this session
 
@@ -88,15 +88,15 @@ until explicit go-ahead; everything below is local-only.
 
 ## Unfinished / Next Session
 
-| Priority | Feature                                                               | Why                                                                                                                                                                           | Est. size |
-| -------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| 0        | Push the 4 pending branches and open PRs                              | All complete and verified; just blocked on user's no-PRs-on-fork directive being lifted. PR #36's lessons (passing `--repo Schravenralph/...`) apply.                          | minutes   |
-| 1        | File-chip error state + `AbortSignal.timeout` on web attachments      | Backlog item `2026-04-30-attach-webpage-spinner-stuck.md` "Defensive (deferred)" section. PR #36 stopped the bleed; this turns vanishing-on-error into recoverable inline UX. | M         |
-| 2        | Specialist `suggestion_prompts` polish (4 non-BOPA assistants)        | Brainstorm candidate D, simplified after verification: just edit each specialist's starter cards to lead with their slash command, like `rm-assistent` does for BOPA.         | XS-S      |
-| 3        | Mirror PR #36 (`uploadWeb` catch handler) upstream to `open-webui/dev` | Backlog file's tracking table; bug exists upstream. Not a fork PR — fits the no-PRs-on-fork constraint and just helps the community.                                          | XS        |
-| 4        | Phase 4–6 BOPA slash prompts (`/bopa-omgevingsaspecten`, etc.)        | **Still blocked** — verified `Ruimtemeesters-MCP-Servers/packages/memory/src/tools/` only has CRUD (`create/get/list/update_bopa_session`). Phase-execution tools not shipped. | XS each   |
-| 5        | Specialist `filterIds` for `bopa_session_context`                     | v1 attaches only to `rm-assistent`. After observing v1 UX in prod, decide whether to extend to `rm-beleidsadviseur` and `rm-ruimtelijk-adviseur` (the two specialists with rm-databank toolIds that touch BOPA-relevant questions). | XS        |
-| 6        | Specialist-assistant consolidation per single-agent policy           | Yesterday's P6, still oversized for forge. Needs explicit migration session.                                                                                                  | L         |
+| Priority | Feature                                                                | Why                                                                                                                                                                                                                                 | Est. size |
+| -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 0        | Push the 4 pending branches and open PRs                               | All complete and verified; just blocked on user's no-PRs-on-fork directive being lifted. PR #36's lessons (passing `--repo Schravenralph/...`) apply.                                                                               | minutes   |
+| 1        | File-chip error state + `AbortSignal.timeout` on web attachments       | Backlog item `2026-04-30-attach-webpage-spinner-stuck.md` "Defensive (deferred)" section. PR #36 stopped the bleed; this turns vanishing-on-error into recoverable inline UX.                                                       | M         |
+| 2        | Specialist `suggestion_prompts` polish (4 non-BOPA assistants)         | Brainstorm candidate D, simplified after verification: just edit each specialist's starter cards to lead with their slash command, like `rm-assistent` does for BOPA.                                                               | XS-S      |
+| 3        | Mirror PR #36 (`uploadWeb` catch handler) upstream to `open-webui/dev` | Backlog file's tracking table; bug exists upstream. Not a fork PR — fits the no-PRs-on-fork constraint and just helps the community.                                                                                                | XS        |
+| 4        | Phase 4–6 BOPA slash prompts (`/bopa-omgevingsaspecten`, etc.)         | **Still blocked** — verified `Ruimtemeesters-MCP-Servers/packages/memory/src/tools/` only has CRUD (`create/get/list/update_bopa_session`). Phase-execution tools not shipped.                                                      | XS each   |
+| 5        | Specialist `filterIds` for `bopa_session_context`                      | v1 attaches only to `rm-assistent`. After observing v1 UX in prod, decide whether to extend to `rm-beleidsadviseur` and `rm-ruimtelijk-adviseur` (the two specialists with rm-databank toolIds that touch BOPA-relevant questions). | XS        |
+| 6        | Specialist-assistant consolidation per single-agent policy             | Yesterday's P6, still oversized for forge. Needs explicit migration session.                                                                                                                                                        | L         |
 
 ## Spec deviations worth flagging
 
@@ -118,7 +118,7 @@ until explicit go-ahead; everything below is local-only.
 ## Observations
 
 - **Branch reconciliation pays.** Discovering the `forge/20260430-bopa-session-inlet-filter`
-  branch *after* writing cycle 1 from scratch was lucky — it could
+  branch _after_ writing cycle 1 from scratch was lucky — it could
   have been a duplicate-effort waste, but the duplicate's `httpx` choice
   was a real bug fix and worth salvaging. **Lesson:** at start of any
   forge session, run `git branch -v | grep forge/` to spot in-flight
@@ -132,7 +132,7 @@ until explicit go-ahead; everything below is local-only.
   `pydantic`, etc.). Adding to `reference_openwebui_foot_guns.md`.
 - **Project ruff config bans `from datetime import …`.** Per
   `pyproject.toml` `flake8-import-conventions.banned-from = ["ast",
-  "datetime"]` with `aliases = { datetime = "dt" }`. Caught me in
+"datetime"]` with `aliases = { datetime = "dt" }`. Caught me in
   cycles 1a's tests. Worth a feedback memory.
 - **State file mixed with another project.** `/tmp/forge-session.json`
   carried entries from `Ruimtemeesters-MCP-Servers` cycles done in a
@@ -173,6 +173,7 @@ git push -u origin forge/20260430-verify-llm-connections
 ```
 
 After PRs open, watch for:
+
 - **Bugbot review** — apply lessons from `reference_bugbot_stale_comments.md`
   (status check is authoritative; comment count re-anchors).
 - **Format CI** — pre-existing E501 debt in `register_assistants.py` PROMPT
@@ -186,9 +187,9 @@ enrich UX without depending on the four pending PRs landing first.
 
 ## Cycle log
 
-| Cycle  | Started        | Ended          | Wall  | Output                                    |
-| ------ | -------------- | -------------- | ----- | ----------------------------------------- |
-| 1      | session start  | mid-session    | ~80m  | filter source, registrar wiring, 18 tests, doc, spec |
-| 2      | mid-session    | +10m           | ~10m  | `/bopa-help` PROMPTS entry, system-prompt link |
-| 1a     | post-cycle 2   | end-session    | ~30m  | `httpx.AsyncClient` swap, `max_age_hours`, +5 tests, doc sync |
-| (none) | end-session    | now            | ~10m  | branch investigation + this report        |
+| Cycle  | Started       | Ended       | Wall | Output                                                        |
+| ------ | ------------- | ----------- | ---- | ------------------------------------------------------------- |
+| 1      | session start | mid-session | ~80m | filter source, registrar wiring, 18 tests, doc, spec          |
+| 2      | mid-session   | +10m        | ~10m | `/bopa-help` PROMPTS entry, system-prompt link                |
+| 1a     | post-cycle 2  | end-session | ~30m | `httpx.AsyncClient` swap, `max_age_hours`, +5 tests, doc sync |
+| (none) | end-session   | now         | ~10m | branch investigation + this report                            |
