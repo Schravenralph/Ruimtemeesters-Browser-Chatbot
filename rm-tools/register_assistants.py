@@ -11,6 +11,7 @@ Usage:
 import argparse
 import json
 import sys
+from pathlib import Path
 
 import requests
 
@@ -19,6 +20,9 @@ import requests
 # even when the local Ollama is paused or doesn't have llama3.1 pulled.
 # Override per-deployment with the --base-model CLI flag.
 BASE_MODEL = 'gemini.gemini-2.5-flash-lite'
+
+# Directory containing OpenWebUI Filter/Pipe modules registered by this script.
+FILTERS_DIR = Path(__file__).resolve().parent / 'filters'
 
 ASSISTANTS = [
     {
@@ -198,6 +202,11 @@ Richtlijnen:
                 'server:mcp:rm-aggregator',
                 'server:mcp:rm-memory',
             ],
+            # Inlet filter that injects the user's most-recent active BOPA
+            # session into the system prompt. Read-only, fail-open (chat
+            # proceeds unchanged if rm-memory is unreachable). v1 attaches
+            # only here; extending to specialists is a follow-up cycle.
+            'filterIds': ['bopa_session_context'],
         },
         'params': {
             'system': """Je bent de Ruimtemeesters AI Assistent — de centrale toegangspoort tot alle Ruimtemeesters applicaties en data.
@@ -348,6 +357,20 @@ PROMPTS = [
 ]
 
 
+FILTERS = [
+    {
+        'id': 'bopa_session_context',
+        'name': 'BOPA Session Context',
+        'description': (
+            "Inlet filter that injects the user's most-recent active BOPA session "
+            'into the system prompt. Read-only context priming via rm-memory MCP. '
+            'No-op when rm-memory is unreachable or the user has no active sessions.'
+        ),
+        'source_path': 'bopa_session_context.py',
+    },
+]
+
+
 def _build_model_payload(assistant: dict) -> dict:
     """Single source of truth for the assistant POST payload (used by both
     live registration and --dry-run printing). Keep dry_run_model and
@@ -422,12 +445,94 @@ def register_prompt(base_url: str, token: str, prompt: dict) -> bool:
     return False
 
 
+def _read_filter_source(filter_def: dict) -> str:
+    """Load a filter's Python source from FILTERS_DIR. Raises FileNotFoundError
+    on miss so the caller fails loudly rather than registering an empty body."""
+    path = FILTERS_DIR / filter_def['source_path']
+    return path.read_text(encoding='utf-8')
+
+
+def register_filter(base_url: str, token: str, filter_def: dict) -> bool:
+    """Register or update an OpenWebUI filter (Function with type='filter').
+
+    The server infers `type` from the module's class definition (Pipe / Filter /
+    Action), so the payload is just the FunctionForm: {id, name, content, meta}.
+    Newly created functions are inactive by default — we toggle them on.
+    """
+    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+    try:
+        content = _read_filter_source(filter_def)
+    except FileNotFoundError as e:
+        print(f'  x Filter source missing: {filter_def["id"]} -- {e}')
+        return False
+
+    payload = {
+        'id': filter_def['id'],
+        'name': filter_def['name'],
+        'content': content,
+        'meta': {'description': filter_def.get('description', '')},
+    }
+
+    resp = requests.post(f'{base_url}/api/v1/functions/create', headers=headers, json=payload)
+    created = False
+    if resp.status_code == 200:
+        print(f'  + Filter: {filter_def["name"]} ({filter_def["id"]})')
+        created = True
+    elif 'id_taken' in resp.text.lower() or resp.status_code in (400, 409):
+        # Update path: PUT-like POST to /id/{id}/update.
+        resp = requests.post(
+            f'{base_url}/api/v1/functions/id/{filter_def["id"]}/update',
+            headers=headers,
+            json=payload,
+        )
+        if resp.status_code == 200:
+            print(f'  ~ Updated filter: {filter_def["name"]} ({filter_def["id"]})')
+        else:
+            print(f'  x Failed filter update: {filter_def["id"]} -- {resp.status_code}: {resp.text[:200]}')
+            return False
+    else:
+        print(f'  x Failed filter create: {filter_def["id"]} -- {resp.status_code}: {resp.text[:200]}')
+        return False
+
+    # Ensure the filter is active. Toggle is a flip-switch — only call it when
+    # currently inactive, otherwise we'd disable a filter that admin already
+    # enabled manually.
+    get_resp = requests.get(
+        f'{base_url}/api/v1/functions/id/{filter_def["id"]}',
+        headers=headers,
+    )
+    if get_resp.status_code == 200:
+        is_active = bool(get_resp.json().get('is_active'))
+        if not is_active:
+            tog = requests.post(
+                f'{base_url}/api/v1/functions/id/{filter_def["id"]}/toggle',
+                headers=headers,
+            )
+            if tog.status_code == 200:
+                print('    -> activated')
+            else:
+                print(f'    -> activation failed: {tog.status_code}: {tog.text[:200]}')
+                return False
+        elif created:
+            # Server-side: a freshly-created filter without a `toggle` attribute
+            # comes back inactive. If we got here with is_active=True, OpenWebUI
+            # already auto-enabled it (filter has the `toggle` flag). Either is fine.
+            pass
+    else:
+        print(f'    -> could not verify is_active: {get_resp.status_code}')
+        # Don't fail — best-effort activation; admin can flip via UI.
+
+    return True
+
+
 def dry_run_model(assistant: dict) -> bool:
     """Print what would be POSTed for an assistant. Always succeeds."""
     payload = _build_model_payload(assistant)
     print(f'  ? Would register model: {assistant["name"]} ({assistant["id"]})')
     print(f'    base_model_id: {assistant["base_model_id"]}')
     print(f'    toolIds: {assistant["meta"].get("toolIds", [])}')
+    if assistant['meta'].get('filterIds'):
+        print(f'    filterIds: {assistant["meta"].get("filterIds")}')
     print(f'    suggestion_prompts: {len(assistant["meta"].get("suggestion_prompts", []))}')
     print(f'    payload bytes: {len(json.dumps(payload))}')
     return True
@@ -437,6 +542,20 @@ def dry_run_prompt(prompt: dict) -> bool:
     """Print what would be POSTed for a slash prompt. Always succeeds."""
     print(f'  ? Would register prompt: /{prompt["command"]} — {prompt["name"]}')
     print(f'    content preview: {prompt["content"][:80]}{"..." if len(prompt["content"]) > 80 else ""}')
+    return True
+
+
+def dry_run_filter(filter_def: dict) -> bool:
+    """Print what would be POSTed for a filter. Surfaces missing source files
+    early so the live registration doesn't fail mid-run."""
+    try:
+        content = _read_filter_source(filter_def)
+    except FileNotFoundError as e:
+        print(f'  ? Filter source MISSING: {filter_def["id"]} -- {e}')
+        return False
+    print(f'  ? Would register filter: {filter_def["name"]} ({filter_def["id"]})')
+    print(f'    description: {filter_def.get("description", "")[:80]}')
+    print(f'    source bytes: {len(content)}')
     return True
 
 
@@ -465,7 +584,19 @@ def main():
 
     suffix = ' (dry-run)' if args.dry_run else ''
 
-    print(f'=== Registering {len(ASSISTANTS)} assistants{suffix} ===\n')
+    # Filters must register before models — a model that lists a filter ID in
+    # meta.filterIds before the filter exists is harmless on save (OpenWebUI
+    # accepts arbitrary IDs) but the filter won't run until it's installed and
+    # active. Registering filters first keeps the order observable in admin
+    # UIs and avoids a confusing "first chat after install has no injection"
+    # window.
+    print(f'=== Registering {len(FILTERS)} filters{suffix} ===\n')
+    if args.dry_run:
+        filter_success = sum(1 for f in FILTERS if dry_run_filter(f))
+    else:
+        filter_success = sum(1 for f in FILTERS if register_filter(args.url, args.token, f))
+
+    print(f'\n=== Registering {len(ASSISTANTS)} assistants{suffix} ===\n')
     if args.dry_run:
         model_success = sum(1 for a in ASSISTANTS if dry_run_model(a))
     else:
@@ -477,10 +608,15 @@ def main():
     else:
         prompt_success = sum(1 for p in PROMPTS if register_prompt(args.url, args.token, p))
 
-    print(f'\nModels: {model_success}/{len(ASSISTANTS)}{suffix}')
+    print(f'\nFilters: {filter_success}/{len(FILTERS)}{suffix}')
+    print(f'Models: {model_success}/{len(ASSISTANTS)}{suffix}')
     print(f'Prompts: {prompt_success}/{len(PROMPTS)}{suffix}')
 
-    return 0 if model_success == len(ASSISTANTS) and prompt_success == len(PROMPTS) else 1
+    return (
+        0
+        if model_success == len(ASSISTANTS) and prompt_success == len(PROMPTS) and filter_success == len(FILTERS)
+        else 1
+    )
 
 
 if __name__ == '__main__':
