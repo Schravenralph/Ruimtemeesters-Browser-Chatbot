@@ -19,7 +19,7 @@
 #   pre-commit hook or CI step. In write mode, missing source is a
 #   hard error (exit 2).
 
-set -uo pipefail
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 DEFAULT_SOURCE="$REPO_ROOT/../Ruimtemeesters-MCP-Servers/packages/memory/skills/bopa.md"
