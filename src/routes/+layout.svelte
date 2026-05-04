@@ -844,19 +844,24 @@
 		) {
 			const env = parseHostEnvelope(event.data);
 			if (!env) return;
+			// Drop the message entirely when we haven't detected a live
+			// Geoportaal embed (referrer-detect failed, or the chatbot is
+			// running standalone). Without this gate the handlers below
+			// would still mutate the store with `state.active === false`
+			// and `projectId === NaN`, corrupting future embed-detection.
+			// Bugbot finding on PR #42 (Missing active-state guard).
+			const state = $geoportaalEmbed;
+			if (!state.active) return;
 			// Drop messages addressed to a different project than the iframe
 			// was instantiated for — defends against host bugs that could
 			// cross-talk between project tabs. Variant-mismatch is exempt
 			// for `host.variant.switched`: that envelope by definition
 			// carries the NEW variantId while our store still has the OLD
 			// one, so guarding on variantId would silently drop the very
-			// event meant to update the store (Bugbot finding on PR #42).
-			const state = $geoportaalEmbed;
-			if (state.active) {
-				if (env.projectId !== state.projectId) return;
-				if (env.type !== 'host.variant.switched' && env.variantId !== state.variantId) {
-					return;
-				}
+			// event meant to update the store.
+			if (env.projectId !== state.projectId) return;
+			if (env.type !== 'host.variant.switched' && env.variantId !== state.variantId) {
+				return;
 			}
 			if (env.type === 'host.ready') {
 				geoportaalEmbed.update((s) => ({ ...s, bridgeState: 'ready' }));
