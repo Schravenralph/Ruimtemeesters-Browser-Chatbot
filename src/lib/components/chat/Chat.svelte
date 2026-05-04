@@ -945,8 +945,13 @@
 
 				files = [...files];
 			} catch (e) {
-				files = files.filter((f) => f.name !== fileItem.url);
-				toast.error(`${e}`);
+				// Flip the chip to an inline error state instead of removing the
+				// file from the list. The user sees what failed, can read the
+				// reason via the chip's tooltip, and can dismiss with X. Toast
+				// is suppressed because the inline state already conveys it.
+				fileItem.status = 'error';
+				fileItem.error = typeof e === 'string' ? e : (e?.message ?? `${e}`);
+				files = [...files];
 			}
 		}
 	};
@@ -1844,7 +1849,11 @@
 		prompt = '';
 
 		const messages = createMessagesList(history, history.currentId);
-		const _files = structuredClone(files);
+		// Exclude errored attachments from the snapshot used for both
+		// `chatFiles` (the LLM-side context) and `userMessage.files` (the
+		// persisted message history). A single drop at the source means
+		// neither path can leak a failed chip into the sent message.
+		const _files = structuredClone(files).filter((f) => f.status !== 'error');
 
 		chatFiles.push(
 			..._files.filter(

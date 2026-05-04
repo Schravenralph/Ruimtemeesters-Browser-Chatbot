@@ -1346,10 +1346,13 @@
 												type={file.type}
 												size={file?.size}
 												loading={file.status === 'uploading'}
+												error={file.status === 'error'}
+												errorMessage={file.error}
 												dismissible={true}
 												edit={true}
 												small={true}
-												modal={['file', 'collection'].includes(file?.type)}
+												modal={['file', 'collection'].includes(file?.type) &&
+													file.status !== 'error'}
 												on:dismiss={async () => {
 													// Remove from UI state
 													files.splice(fileIdx, 1);

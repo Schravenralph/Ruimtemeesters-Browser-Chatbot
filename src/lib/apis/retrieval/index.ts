@@ -341,6 +341,12 @@ export const processWeb = async (
 		searchParams.append('process', 'false');
 	}
 
+	// 60s client-side timeout. The server's get_content_from_url has no
+	// enforced timeout (see backend/open_webui/routers/retrieval.py
+	// get_content_from_url) so a slow target URL can hang indefinitely.
+	// AbortSignal.timeout flips that into a real error after 60s, which
+	// the chat catch-handler renders as an inline error chip rather than
+	// a permanent spinner.
 	const res = await fetch(`${RETRIEVAL_API_BASE_URL}/process/web?${searchParams.toString()}`, {
 		method: 'POST',
 		headers: {
@@ -351,14 +357,19 @@ export const processWeb = async (
 		body: JSON.stringify({
 			url: url,
 			collection_name: collection_name
-		})
+		}),
+		signal: AbortSignal.timeout(60_000)
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
 			return res.json();
 		})
 		.catch((err) => {
-			error = err.detail;
+			if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+				error = `Web fetch timed out after 60s — the source URL is slow or unreachable.`;
+			} else {
+				error = err?.detail ?? err?.message ?? err;
+			}
 			console.error(err);
 			return null;
 		});
