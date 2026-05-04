@@ -760,25 +760,31 @@
 	// Open WebUI marketing site (export:stats handshake) and the Ruimtemeesters
 	// Databank app (rm:chatbot:context handshake when this SPA is iframed inside
 	// the Databank document detail page).
+	const OPENWEBUI_MESSAGE_ORIGINS = [
+		'https://openwebui.com',
+		'https://www.openwebui.com',
+		'http://localhost:9999'
+	];
 	const RM_DATABANK_ORIGINS = [
 		'https://databank.datameesters.nl',
 		'https://databank.staging.datameesters.nl',
 		'http://localhost:5173',
 		'http://localhost:5050'
 	];
-	const ALLOWED_MESSAGE_ORIGINS = [
-		'https://openwebui.com',
-		'https://www.openwebui.com',
-		'http://localhost:9999',
-		...RM_DATABANK_ORIGINS
-	];
+	const ALLOWED_MESSAGE_ORIGINS = [...OPENWEBUI_MESSAGE_ORIGINS, ...RM_DATABANK_ORIGINS];
 
 	const windowMessageEventHandler = async (event) => {
 		if (!ALLOWED_MESSAGE_ORIGINS.includes(event.origin)) {
 			return;
 		}
 
-		if (event.data === 'export:stats' || event.data?.type === 'export:stats') {
+		// export:stats is the OpenWebUI marketing-site handshake; restrict to its
+		// trusted origins so Databank embeds (which share ALLOWED_MESSAGE_ORIGINS
+		// for the rm:chatbot:context handshake below) cannot trigger the modal.
+		if (
+			(event.data === 'export:stats' || event.data?.type === 'export:stats') &&
+			OPENWEBUI_MESSAGE_ORIGINS.includes(event.origin)
+		) {
 			syncStatsEventData = event.data;
 			showSyncStatsModal = true;
 			return;
@@ -787,10 +793,7 @@
 		// Ruimtemeesters Databank tells us which document the user is currently
 		// viewing in the parent app. We mirror it into a store so chat pages can
 		// seed system prompts or render a context banner.
-		if (
-			event.data?.type === 'rm:chatbot:context' &&
-			RM_DATABANK_ORIGINS.includes(event.origin)
-		) {
+		if (event.data?.type === 'rm:chatbot:context' && RM_DATABANK_ORIGINS.includes(event.origin)) {
 			const payload = event.data.payload;
 			if (payload && typeof payload === 'object' && typeof payload.documentId === 'string') {
 				embedContext.set({
@@ -1100,7 +1103,9 @@
 		<!-- Banner shown when this SPA is embedded inside the Ruimtemeesters
 		     Databank app and the parent has told us which document the user is
 		     reading. Lets the user see the integration is alive without changing
-		     the rest of the chat surface. -->
+		     the rest of the chat surface. The banner is fixed (so it stays put
+		     while the chat scrolls) — the wrapper below adds matching top
+		     padding so the chat surface isn't covered. -->
 		<div
 			class="fixed top-0 inset-x-0 z-50 bg-blue-50 dark:bg-blue-950/60 border-b border-blue-200 dark:border-blue-800 px-4 py-2 text-xs text-blue-900 dark:text-blue-100 flex items-center justify-between gap-3"
 		>
@@ -1120,17 +1125,19 @@
 			</button>
 		</div>
 	{/if}
-	{#if $isApp}
-		<div class="flex flex-row h-screen">
-			<AppSidebar />
+	<div class:pt-9={$embedContext}>
+		{#if $isApp}
+			<div class="flex flex-row h-screen">
+				<AppSidebar />
 
-			<div class="w-full flex-1 max-w-[calc(100%-4.5rem)]">
-				<slot />
+				<div class="w-full flex-1 max-w-[calc(100%-4.5rem)]">
+					<slot />
+				</div>
 			</div>
-		</div>
-	{:else}
-		<slot />
-	{/if}
+		{:else}
+			<slot />
+		{/if}
+	</div>
 {/if}
 
 {#if $config?.features.enable_community_sharing}
