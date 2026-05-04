@@ -1849,14 +1849,17 @@
 		prompt = '';
 
 		const messages = createMessagesList(history, history.currentId);
-		const _files = structuredClone(files);
+		// Exclude errored attachments from the snapshot used for both
+		// `chatFiles` (the LLM-side context) and `userMessage.files` (the
+		// persisted message history). A single drop at the source means
+		// neither path can leak a failed chip into the sent message.
+		const _files = structuredClone(files).filter((f) => f.status !== 'error');
 
 		chatFiles.push(
 			..._files.filter(
 				(item) =>
-					item.status !== 'error' &&
-					(['doc', 'text', 'note', 'chat', 'folder', 'collection'].includes(item.type) ||
-						(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/')))
+					['doc', 'text', 'note', 'chat', 'folder', 'collection'].includes(item.type) ||
+					(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/'))
 			)
 		);
 		chatFiles = chatFiles.filter(
