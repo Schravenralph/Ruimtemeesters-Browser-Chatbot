@@ -65,11 +65,7 @@ def _sse_response(payload: dict, *, framing: str = 'sse') -> MagicMock:
         'id': 'rpc-id',
         'result': {'content': [{'type': 'text', 'text': inner}]},
     }
-    body = (
-        json.dumps(envelope)
-        if framing == 'json'
-        else f'event: message\ndata: {json.dumps(envelope)}\n'
-    )
+    body = json.dumps(envelope) if framing == 'json' else f'event: message\ndata: {json.dumps(envelope)}\n'
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
     resp.text = body
@@ -150,8 +146,7 @@ def test_happy_path_returns_typed_payload(monkeypatch):
     headers = call.kwargs['headers']
     assert headers['Authorization'] == 'Bearer sekret'
     assert 'X-Forwarded-User' not in headers, (
-        "Admin endpoint must not impersonate a user — see "
-        'identity.ts buildAdminIdentity (system:admin).'
+        'Admin endpoint must not impersonate a user — see identity.ts buildAdminIdentity (system:admin).'
     )
     assert 'application/json' in headers['Accept']
     assert 'text/event-stream' in headers['Accept']
