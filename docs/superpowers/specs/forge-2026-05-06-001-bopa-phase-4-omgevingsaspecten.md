@@ -8,7 +8,7 @@ Add a `/bopa-omgevingsaspecten` slash prompt to the chatbot so an advisor can ru
 
 ## Why
 
-`/bopa-help` tells advisors today: *"Fase 4–6 commando's zijn nog niet gepubliceerd (MCP-tools in de wacht)."* That caveat is stale: `sample_bopa_constraints_at_point`, `theme_profile_for_gemeente`, and `rules_by_gemeente_and_theme` all exist on the geoportaal + databank MCPs. The slash prompt is the missing piece that lets an advisor run Phase 4 without dropping into raw tool-calls. Continues the BOPA pipeline that is the product's primary motion.
+`/bopa-help` tells advisors today: _"Fase 4–6 commando's zijn nog niet gepubliceerd (MCP-tools in de wacht)."_ That caveat is stale: `sample_bopa_constraints_at_point`, `theme_profile_for_gemeente`, and `rules_by_gemeente_and_theme` all exist on the geoportaal + databank MCPs. The slash prompt is the missing piece that lets an advisor run Phase 4 without dropping into raw tool-calls. Continues the BOPA pipeline that is the product's primary motion.
 
 ## Success criteria
 
