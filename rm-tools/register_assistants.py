@@ -306,9 +306,10 @@ PROMPTS = [
             'Fase 6 Toetsing (eindafweging). Fasen 2/3 vereisen Fase 1; 4/5 vereisen 1+2+3; 6 vereist '
             'alle voorgaande.\n'
             "3) Slash-commando's — vermeld dat de adviseur kan starten met `/bopa-haalbaarheid` (Fase 1), "
-            'door kan met `/bopa-strijdigheid` (Fase 2) en `/bopa-beleid` (Fase 3), en `/bopa-status` '
-            "kan gebruiken voor een overzicht van lopende sessies. Fase 4–6 commando's zijn nog niet "
-            'gepubliceerd (MCP-tools in de wacht).\n'
+            'door kan met `/bopa-strijdigheid` (Fase 2), `/bopa-beleid` (Fase 3) en '
+            '`/bopa-omgevingsaspecten` (Fase 4), en `/bopa-status` kan gebruiken voor een overzicht '
+            "van lopende sessies. Fase 5–6 commando's zijn nog niet gepubliceerd (MCP-tools in de "
+            'wacht).\n'
             '4) Automatische context — meld dat als de adviseur al een lopende BOPA-sessie heeft, '
             '`rm-assistent` die automatisch inlaadt aan het begin van elke chat (via de '
             'bopa_session_context inlet filter), zodat ze niet steeds `/bopa-status` hoeven te typen.\n'
@@ -363,6 +364,37 @@ PROMPTS = [
             'om relevante beleidsstukken op te halen, en koppel ze aan de geometrie via het Geoportaal. Schrijf de '
             'gevonden beleidskaders terug via `update_bopa_session({phase: 3, ...})`. Citeer voor elke bewering de '
             'titel en bron van het beleidsstuk; geen ongedekte beweringen.'
+        ),
+    },
+    {
+        'command': 'bopa-omgevingsaspecten',
+        'name': 'BOPA — Fase 4: Omgevingsaspecten',
+        'content': (
+            'Voer de BOPA Fase 4 (Omgevingsaspecten) toets uit voor sessie {{session_id}}. '
+            'Vereist Fasen 1+2+3 als prerequisites — als één daarvan nog niet is afgerond, leg dat uit en stel voor '
+            '`/bopa-haalbaarheid`, `/bopa-strijdigheid` of `/bopa-beleid` eerst te draaien (volg de volgorde uit '
+            '`dependencies_met` op de sessie). De MCP weigert de schrijf-call op niet-vervulde prerequisites — '
+            'lees die foutmelding goed en vertaal in het Nederlands wat de adviseur moet doen.\n\n'
+            'Stappen:\n'
+            '1) Haal de sessie op (`get_bopa_session({session_id})`) en lees `project_id`, `lon`, `lat`, '
+            '`gemeente_code`.\n'
+            "2) Roep op het Geoportaal MCP `sample_bopa_constraints_at_point({lon, lat})` aan voor de ruimtelijke "
+            'constraints die over het projectpunt liggen (bodem, geluid, water, ecologie, archeologie, etc.).\n'
+            "3) Roep op de Databank MCP `theme_profile_for_gemeente({gemeente_code})` aan voor het volledige "
+            "themaprofiel van de gemeente (welke thema's gereguleerd zijn en hoe streng).\n"
+            "4) Bereken de doorsnede tussen de geraakte ruimtelijke constraints en de gereguleerde thema's. "
+            'Voor elk gedeeld thema, roep `rules_by_gemeente_and_theme({gemeente_code, theme})` aan voor de '
+            'concrete artikelen + verwijzingen.\n'
+            "5) Geef per thema een verdict: `present` (volledig geadresseerd in beleid + ruimtelijk relevant), "
+            "`partial` (deels — leg uit wat ontbreekt), of `missing` (gereguleerd thema raakt het project "
+            'maar geen beleidsdekking gevonden).\n'
+            '6) Schrijf de bevindingen terug via `update_bopa_session({phase: 4, data: {themes: [...], '
+            'verdicts: {...}, citations: [...]}})`.\n\n'
+            'Citatie-eis: voor elke bewering verwijs je expliciet naar de bron — Geoportaal-laag '
+            '(`layerKey` + `featureId`) voor ruimtelijke hits, en concreet artikel + naam van het '
+            'beleidsstuk voor regulatoire verwijzingen. Geen ongedekte beweringen. Sluit af met een korte '
+            'Nederlandse samenvatting voor de adviseur en stel `/bopa-status` voor om de bijgewerkte sessie '
+            'te zien.'
         ),
     },
 ]

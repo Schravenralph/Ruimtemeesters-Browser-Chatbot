@@ -163,12 +163,20 @@ def test_format_summary_notes_other_active_sessions():
     assert 'Andere actieve sessies: 2' in block
 
 
-def test_format_summary_handles_phase4_blocked_message():
-    """Phase 4-6 MCP tools aren't shipped yet — surface a warning rather than
-    a fake slash command."""
+def test_format_summary_emits_phase4_slash_command():
+    """Phase 4 (Omgevingsaspecten) is now published — the inlet hint must
+    point at `/bopa-omgevingsaspecten` rather than the fallback warning."""
     block = _format_summary(_session(completed=[1, 2, 3], current=3), others_count=0)
-    # Next phase = 4 (Omgevingsaspecten); no slash command exists yet.
     assert 'Omgevingsaspecten' in block
+    assert '/bopa-omgevingsaspecten' in block
+    assert 'MCP-tool nog niet beschikbaar' not in block
+
+
+def test_format_summary_handles_phase5_blocked_message():
+    """Phase 5/6 are still pending MCP tools — when 1-4 are done the next
+    phase is 5 and the hint must surface the warning, not a fake slash."""
+    block = _format_summary(_session(completed=[1, 2, 3, 4], current=4), others_count=0)
+    assert 'Onderbouwing' in block
     assert 'MCP-tool nog niet beschikbaar' in block
 
 
