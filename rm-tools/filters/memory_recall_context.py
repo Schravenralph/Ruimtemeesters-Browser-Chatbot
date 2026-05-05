@@ -53,6 +53,43 @@ def _last_user_message(messages: list[dict]) -> str:
     return ''
 
 
+def _parse_mcp_response(text: str) -> dict:
+    """Parse an MCP HTTP response body. The Streamable HTTP transport
+    returns either pure JSON (rare — error paths) OR Server-Sent-Events
+    framed as `event: message\\ndata: {...}` (the normal path when
+    `Accept: application/json, text/event-stream` is requested, which the
+    MCP server now mandates — Issue #49 follow-up). We accept both.
+
+    Pure function. Raises ValueError on a body that isn't either shape.
+    """
+    if not text:
+        raise ValueError('empty response body')
+    stripped = text.lstrip()
+    if stripped.startswith('{'):
+        return json.loads(stripped)
+    # SSE: read each `data: …` payload and return the last (and usually
+    # only) one. Multiple data lines in a single event get concatenated
+    # per the spec; multiple events are rare for tools/call but pick the
+    # last so the final result wins.
+    last_payload: dict | None = None
+    data_buf: list[str] = []
+    for line in text.splitlines():
+        if line.startswith('data:'):
+            data_buf.append(line[5:].lstrip())
+        elif line == '' and data_buf:
+            joined = '\n'.join(data_buf).strip()
+            data_buf = []
+            if joined:
+                last_payload = json.loads(joined)
+    if data_buf:
+        joined = '\n'.join(data_buf).strip()
+        if joined:
+            last_payload = json.loads(joined)
+    if last_payload is None:
+        raise ValueError('SSE body had no data lines')
+    return last_payload
+
+
 def _format_block(matches: list[dict]) -> str:
     """Render the system-prompt block. Pure function — no I/O.
 
@@ -147,13 +184,15 @@ class Filter:
     def _query_hash(self, query: str) -> str:
         return hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]
 
-    async def _recall(self, query: str, user_id: str) -> list[dict]:
+    async def _recall(self, query: str, user_email: str) -> list[dict]:
         """Call recall_memory on rm-memory. Returns matches list (possibly empty).
 
-        Results are filtered client-side by owner_user_id — the shared MCP
-        bearer token doesn't distinguish users, so the server may return
-        memories belonging to other users (same pattern as
-        bopa_session_context.py §249-260).
+        The X-Forwarded-User header carries the end-user's email; rm-memory's
+        auth layer (packages/memory/src/auth.ts) maps it to a `clerk:<email>`
+        identity and applies the per-caller scoping predicate server-side.
+        That replaces the older client-side post-filter on owner_user_id —
+        which was wrong anyway, since OpenWebUI's user.id is a UUID while the
+        MCP stores `clerk:<email>` (Issue #49).
 
         Async because OpenWebUI awaits the inlet on its main asyncio loop —
         a sync HTTP call would block other coroutines for the timeout window.
@@ -173,12 +212,14 @@ class Filter:
         }
         if self.valves.mcp_token:
             headers['Authorization'] = f'Bearer {self.valves.mcp_token}'
+        if user_email:
+            headers['X-Forwarded-User'] = user_email
 
         try:
             async with httpx.AsyncClient(timeout=self.valves.timeout_ms / 1000.0) as client:
                 resp = await client.post(self.valves.mcp_url, json=payload, headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = _parse_mcp_response(resp.text)
         except (httpx.HTTPError, ValueError) as e:
             log.warning('memory_recall_context: rm-memory RPC failed: %s', e)
             return []
@@ -198,10 +239,7 @@ class Filter:
         matches = blob.get('matches') if isinstance(blob, dict) else None
         if not isinstance(matches, list):
             return []
-        return [
-            m for m in matches
-            if isinstance(m, dict) and m.get('owner_user_id') == user_id
-        ]
+        return [m for m in matches if isinstance(m, dict)]
 
     def _evict_expired(self) -> None:
         """Remove all expired cache entries to prevent unbounded dict growth."""
@@ -210,8 +248,13 @@ class Filter:
         for k in expired:
             del self._cache[k]
 
-    async def _block_for_query(self, user_id: str, query: str) -> str | None:
-        """Cached lookup. Returns None when there are no matches or on RPC failure."""
+    async def _block_for_query(self, user_id: str, user_email: str, query: str) -> str | None:
+        """Cached lookup. Returns None when there are no matches or on RPC failure.
+
+        Cache is keyed on (user_id, query_hash) — the OpenWebUI user.id is
+        stable per session and avoids cache collision across users sharing a
+        machine. The email is used only to build X-Forwarded-User for the
+        outbound RPC."""
         if not user_id or not query:
             return None
         if len(query) < self.valves.min_query_chars:
@@ -220,7 +263,7 @@ class Filter:
         cached = self._cache.get(key)
         if cached and cached[0] > self._now():
             return cached[1]
-        matches = await self._recall(query, user_id)
+        matches = await self._recall(query, user_email)
         block = _format_block(matches) if matches else None
         self._cache[key] = (self._now() + self.valves.cache_ttl_s, block)
         self._evict_expired()
@@ -275,6 +318,7 @@ class Filter:
                 return body
             user = __user__ or {}
             user_id = str(user.get('id') or '')
+            user_email = str(user.get('email') or '').strip()
             if not user_id or self._user_opted_out(user):
                 return body
             if not self._model_in_scope(body, __metadata__):
@@ -282,7 +326,7 @@ class Filter:
             query = _last_user_message(body.get('messages') or [])
             if not query:
                 return body
-            block = await self._block_for_query(user_id, query)
+            block = await self._block_for_query(user_id, user_email, query)
             if block:
                 self._inject_block(body, block)
         except Exception as e:

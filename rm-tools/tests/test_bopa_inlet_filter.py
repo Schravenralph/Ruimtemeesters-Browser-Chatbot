@@ -42,19 +42,31 @@ def _hours_ago_iso(hours: float) -> str:
     return (dt.datetime.now(dt.UTC) - dt.timedelta(hours=hours)).isoformat()
 
 
-def _mcp_response(sessions: list[dict]) -> MagicMock:
+def _mcp_response(sessions: list[dict], *, framing: str = 'sse') -> MagicMock:
     """Build a MagicMock that mimics httpx.Response for a successful MCP
-    tools/call returning the given sessions list."""
-    text = json.dumps({'sessions': sessions})
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    resp.json.return_value = {
+    tools/call returning the given sessions list.
+
+    Defaults to SSE framing because the rm-memory MCP's Streamable HTTP
+    transport returns `event: message\\ndata: {...}` whenever the request
+    accepts both `application/json` and `text/event-stream` (which it
+    must — the server enforces that). `framing='json'` is kept for
+    coverage of the rare pure-JSON path.
+    """
+    inner = json.dumps({'sessions': sessions})
+    envelope = {
         'jsonrpc': '2.0',
         'id': 1,
         'result': {
-            'content': [{'type': 'text', 'text': text}],
+            'content': [{'type': 'text', 'text': inner}],
         },
     }
+    if framing == 'json':
+        body = json.dumps(envelope)
+    else:
+        body = f'event: message\ndata: {json.dumps(envelope)}\n'
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.text = body
     return resp
 
 

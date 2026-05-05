@@ -40,6 +40,42 @@ PHASE_SLASH_COMMANDS = {
 }
 
 
+def _parse_mcp_response(text: str) -> dict:
+    """Parse an MCP HTTP response body. The Streamable HTTP transport
+    returns either pure JSON OR Server-Sent-Events framed as
+    `event: message\\ndata: {...}`. The MCP server requires both content
+    types to be in the Accept header and picks SSE for the response, so
+    this parser handles both shapes.
+
+    Pure function. Raises ValueError on an unparseable body. Mirrored in
+    `memory_recall_context._parse_mcp_response` (duplicated rather than
+    imported because OpenWebUI loads each filter as a self-contained
+    module).
+    """
+    if not text:
+        raise ValueError('empty response body')
+    stripped = text.lstrip()
+    if stripped.startswith('{'):
+        return json.loads(stripped)
+    last_payload: dict | None = None
+    data_buf: list[str] = []
+    for line in text.splitlines():
+        if line.startswith('data:'):
+            data_buf.append(line[5:].lstrip())
+        elif line == '' and data_buf:
+            joined = '\n'.join(data_buf).strip()
+            data_buf = []
+            if joined:
+                last_payload = json.loads(joined)
+    if data_buf:
+        joined = '\n'.join(data_buf).strip()
+        if joined:
+            last_payload = json.loads(joined)
+    if last_payload is None:
+        raise ValueError('SSE body had no data lines')
+    return last_payload
+
+
 def _compute_dependencies_met(completed_phases: list[int]) -> list[int]:
     """Mirror of computeDependenciesMet in
     Ruimtemeesters-MCP-Servers/packages/memory/src/phaseDependencies.ts.
@@ -193,7 +229,7 @@ class Filter:
         delta_h = (dt.datetime.now(dt.UTC) - ts).total_seconds() / 3600
         return 0 <= delta_h <= self.valves.max_age_hours
 
-    async def _fetch_active_session(self, user_id: str) -> tuple[dict | None, int]:
+    async def _fetch_active_session(self, user_id: str, user_email: str) -> tuple[dict | None, int]:
         """Call list_bopa_sessions on rm-memory. Returns (chosen_session, others_count).
 
         chosen_session is None when the user has zero active sessions, all
@@ -216,12 +252,14 @@ class Filter:
         }
         if self.valves.mcp_token:
             headers['Authorization'] = f'Bearer {self.valves.mcp_token}'
+        if user_email:
+            headers['X-Forwarded-User'] = user_email
 
         try:
             async with httpx.AsyncClient(timeout=self.valves.timeout_ms / 1000.0) as client:
                 resp = await client.post(self.valves.mcp_url, json=payload, headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = _parse_mcp_response(resp.text)
         except (httpx.HTTPError, ValueError) as e:
             log.warning('bopa_session_context: rm-memory RPC failed: %s', e)
             return None, 0
@@ -246,15 +284,15 @@ class Filter:
         if not isinstance(sessions, list):
             return None, 0
 
-        # Filter by owner + active status + recency. BOPA sessions are
-        # project-scoped on read (memory-scoping-model spec §9), so the
-        # owner narrowing happens client-side. Recency narrowing happens
-        # here too — a stale active session is treated as no session.
+        # Filter by status + recency. The X-Forwarded-User header drives
+        # server-side scoping in rm-memory (Issue #49 — the previous
+        # client-side `owner_user_id == user_id` post-filter compared an
+        # OpenWebUI UUID against the MCP's `clerk:<email>` and never
+        # matched). A stale active session is treated as no session.
         active_owned = [
             s
             for s in sessions
             if isinstance(s, dict)
-            and s.get('owner_user_id') == user_id
             and s.get('status') == 'active'
             and self._is_recent(s)
         ]
@@ -268,14 +306,18 @@ class Filter:
         active_owned.sort(key=sort_key, reverse=True)
         return active_owned[0], max(0, len(active_owned) - 1)
 
-    async def _summary_for_user(self, user_id: str) -> str | None:
-        """Cached lookup. Returns None if no active session or on RPC failure."""
+    async def _summary_for_user(self, user_id: str, user_email: str) -> str | None:
+        """Cached lookup. Returns None if no active session or on RPC failure.
+
+        Cache is keyed on the OpenWebUI user.id (stable per session); the
+        email is used only to build X-Forwarded-User for the outbound RPC.
+        """
         if not user_id:
             return None
         cached = self._cache.get(user_id)
         if cached and cached[0] > self._now():
             return cached[1]
-        session, others = await self._fetch_active_session(user_id)
+        session, others = await self._fetch_active_session(user_id, user_email)
         summary = _format_summary(session, others) if session else None
         self._cache[user_id] = (self._now() + self.valves.cache_ttl_s, summary)
         return summary
@@ -330,11 +372,12 @@ class Filter:
                 return body
             user = __user__ or {}
             user_id = str(user.get('id') or '')
+            user_email = str(user.get('email') or '').strip()
             if not user_id or self._user_opted_out(user):
                 return body
             if not self._model_in_scope(body, __metadata__):
                 return body
-            summary = await self._summary_for_user(user_id)
+            summary = await self._summary_for_user(user_id, user_email)
             if summary:
                 self._inject_summary(body, summary)
         except Exception as e:
