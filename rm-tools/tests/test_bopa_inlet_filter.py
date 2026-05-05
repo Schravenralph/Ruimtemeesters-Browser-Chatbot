@@ -42,19 +42,31 @@ def _hours_ago_iso(hours: float) -> str:
     return (dt.datetime.now(dt.UTC) - dt.timedelta(hours=hours)).isoformat()
 
 
-def _mcp_response(sessions: list[dict]) -> MagicMock:
+def _mcp_response(sessions: list[dict], *, framing: str = 'sse') -> MagicMock:
     """Build a MagicMock that mimics httpx.Response for a successful MCP
-    tools/call returning the given sessions list."""
-    text = json.dumps({'sessions': sessions})
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    resp.json.return_value = {
+    tools/call returning the given sessions list.
+
+    Defaults to SSE framing because the rm-memory MCP's Streamable HTTP
+    transport returns `event: message\\ndata: {...}` whenever the request
+    accepts both `application/json` and `text/event-stream` (which it
+    must — the server enforces that). `framing='json'` is kept for
+    coverage of the rare pure-JSON path.
+    """
+    inner = json.dumps({'sessions': sessions})
+    envelope = {
         'jsonrpc': '2.0',
         'id': 1,
         'result': {
-            'content': [{'type': 'text', 'text': text}],
+            'content': [{'type': 'text', 'text': inner}],
         },
     }
+    if framing == 'json':
+        body = json.dumps(envelope)
+    else:
+        body = f'event: message\ndata: {json.dumps(envelope)}\n'
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.text = body
     return resp
 
 
@@ -163,19 +175,81 @@ def test_format_summary_handles_phase4_blocked_message():
 # --- selection logic via Filter ------------------------------------------
 
 
-def test_owner_filter_picks_only_matching_user():
+def test_x_forwarded_user_header_set_from_user_email():
+    """Issue #49: the BOPA filter must forward the end-user's email as
+    X-Forwarded-User so rm-memory can apply server-side scoping. The old
+    `test_owner_filter_picks_only_matching_user` test that lived here
+    asserted client-side post-filtering on owner_user_id — but that
+    post-filter was wrong (compared OpenWebUI UUID vs `clerk:<email>`)
+    and has been removed; scoping is server-side now."""
     f = Filter()
-    f.valves.cache_ttl_s = 0  # no caching across tests
+    f.valves.cache_ttl_s = 0
+    f.valves.mcp_token = 'gateway-secret'
     sessions = [
-        _session(sid='a', owner='other', gemeente='GM0001'),
-        _session(sid='b', owner='me', completed=[1], current=2, gemeente='GM0002'),
+        _session(sid='b', owner='clerk:ralph@example.org', completed=[1], current=2, gemeente='GM0002'),
+    ]
+    patcher, post_mock = _patch_async_client(_mcp_response(sessions))
+    with patcher:
+        body = _run(
+            f.inlet(
+                _make_body(),
+                __user__={'id': 'openwebui-uuid', 'email': 'ralph@example.org'},
+                __metadata__={'model_id': 'rm-assistent'},
+            )
+        )
+    headers = post_mock.call_args.kwargs.get('headers') or {}
+    assert headers.get('X-Forwarded-User') == 'ralph@example.org'
+    assert headers.get('Authorization') == 'Bearer gateway-secret'
+    sys_msg = body['messages'][0]['content']
+    assert 'GM0002' in sys_msg
+
+
+def test_no_x_forwarded_user_header_when_email_missing():
+    """If the user has no email, the filter still issues the request with
+    the bearer; rm-memory will then 401 — that's an upstream config bug,
+    not the filter's. We assert the header isn't fabricated from user.id."""
+    f = Filter()
+    f.valves.cache_ttl_s = 0
+    f.valves.mcp_token = 'gateway-secret'
+    sessions = [
+        _session(sid='b', owner='clerk:ralph@example.org', completed=[1], current=2, gemeente='GM0002'),
+    ]
+    patcher, post_mock = _patch_async_client(_mcp_response(sessions))
+    with patcher:
+        _run(
+            f.inlet(
+                _make_body(),
+                __user__={'id': 'openwebui-uuid'},  # no 'email'
+                __metadata__={'model_id': 'rm-assistent'},
+            )
+        )
+    headers = post_mock.call_args.kwargs.get('headers') or {}
+    assert 'X-Forwarded-User' not in headers
+    assert headers.get('Authorization') == 'Bearer gateway-secret'
+
+
+def test_session_with_clerk_owner_id_is_returned_not_filtered():
+    """Counterpart to the deleted `test_owner_filter_picks_only_matching_user`:
+    the MCP returns entries with `clerk:<email>` owner_user_id while
+    OpenWebUI's user.id is a UUID. The previous client-side post-filter
+    silently discarded these (Issue #49). The filter now trusts the
+    server-side scoping driven by X-Forwarded-User."""
+    f = Filter()
+    f.valves.cache_ttl_s = 0
+    sessions = [
+        _session(sid='only', owner='clerk:ralph@example.org', completed=[1], current=2, gemeente='GM-CLERK'),
     ]
     patcher, _post = _patch_async_client(_mcp_response(sessions))
     with patcher:
-        body = _run(f.inlet(_make_body(), __user__={'id': 'me'}, __metadata__={'model_id': 'rm-assistent'}))
+        body = _run(
+            f.inlet(
+                _make_body(),
+                __user__={'id': 'openwebui-uuid', 'email': 'ralph@example.org'},
+                __metadata__={'model_id': 'rm-assistent'},
+            )
+        )
     sys_msg = body['messages'][0]['content']
-    assert 'GM0002' in sys_msg
-    assert 'GM0001' not in sys_msg
+    assert 'GM-CLERK' in sys_msg
 
 
 def test_picks_most_recent_active_when_user_has_multiple():

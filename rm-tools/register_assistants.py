@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -203,10 +204,12 @@ Richtlijnen:
                 'server:mcp:rm-memory',
             ],
             # Inlet filters: BOPA session context (priority 10) lands first,
-            # memory recall (priority 11) lands second. Both read-only and
-            # fail-open — chat proceeds unchanged if rm-memory is unreachable.
-            # v1 attaches only here; extending to specialists is a follow-up.
-            'filterIds': ['bopa_session_context', 'memory_recall_context'],
+            # memory recall (priority 11) lands second, save-prompt (priority 12)
+            # last. The first two are read-only and fail-open — chat proceeds
+            # unchanged if rm-memory is unreachable. The save-prompt filter
+            # makes no RPCs; it only injects a system instruction at threshold
+            # crossings. v1 attaches only here; extending to specialists is a follow-up.
+            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt'],
         },
         'params': {
             'system': """Je bent de Ruimtemeesters AI Assistent — de centrale toegangspoort tot alle Ruimtemeesters applicaties en data.
@@ -226,6 +229,9 @@ Persoonlijk geheugen (rm-memory):
 - Roep `save_memory` aan wanneer de gebruiker een terugkerend feit, voorkeur of werkafspraak deelt die volgende sessies relevant blijft (bv. "ik werk vooral aan project X", "noem me bij m'n voornaam", "voor gemeente Y gebruik altijd bron Z"). Kies een korte, kebab-case `name` en zet `scope='user'` voor persoonlijke voorkeuren of `scope='project'` met `project_id` voor projectgebonden feiten.
 - Roep `save_memory` NIET aan voor losse vragen, eenmalige opdrachten, of berichten zonder duurzame waarde.
 - Het systeem injecteert al automatisch relevante memories bovenaan deze prompt (sectie "EERDER OPGESLAGEN MEMORIES"); roep `get_memory(name)` aan voor de volledige inhoud van een specifieke entry.
+- Voor zware downstream-tools (bv. `beleidsscan_query`, `ruimtelijke_toets`, `evaluate_rules`, `compliance_scan`, `search_artikelen`, `search_documents`): roep eerst `prepare_tool_call({target_tool, target_server, project_id?, hint})` aan op rm-memory. Die geeft je het JSON-schema van de doel-tool plus alle eerder opgeslagen memories die voor deze call relevant zijn (FTS-gerankt op tool-beschrijving + hint). Gebruik het om argumenten preciezer te kiezen, dubbel werk te vermijden, en gaten in je input expliciet aan de gebruiker voor te leggen. Sla dit over voor lichte read-only calls of vervolgvragen op een tool die je net hebt gebruikt.
+- Bij een [Systeem-signaal] over gespreks-tokens (zie inlet-filter): rond je antwoord af met een korte vraag of de gebruiker de belangrijkste punten van dit gesprek wil opslaan. Bij bevestiging: roep `summarize_session` aan en volg de scaffold die je terugkrijgt; bij weigering: ga normaal door, wij vragen later opnieuw.
+- **Tool-fouten eerlijk melden:** Als een aanroep van `save_memory`, `forget_memory`, `summarize_session`, `recall_memory` of een andere memory-tool een fout teruggeeft (bv. validation error, 401, timeout): vermeld dit expliciet aan de gebruiker — bijvoorbeeld "Het opslaan is helaas mislukt door een technische fout" — en bied aan om het opnieuw te proberen of de informatie tijdelijk anders vast te leggen. **Beweer nooit dat iets is opgeslagen wanneer de tool een error returnde.** Hetzelfde geldt voor andere tool-aanroepen: als de tool faalt, zeg dat tegen de gebruiker; doe geen alsof.
 
 BOPA-workflow (Buitenplanse Omgevingsplanactiviteit):
 - Nieuwe adviseur die de werkwijze niet kent? Verwijs naar `/bopa-help` voor een korte uitleg.
@@ -372,6 +378,7 @@ FILTERS = [
             'No-op when rm-memory is unreachable or the user has no active sessions.'
         ),
         'source_path': 'bopa_session_context.py',
+        'needs_memory_token': True,
     },
     {
         'id': 'memory_recall_context',
@@ -383,6 +390,19 @@ FILTERS = [
             'no memories match.'
         ),
         'source_path': 'memory_recall_context.py',
+        'needs_memory_token': True,
+    },
+    {
+        'id': 'memory_save_prompt',
+        'name': 'Memory Save Prompt',
+        'description': (
+            'Inlet filter that injects a one-shot instruction telling the assistant '
+            'to ask the user about saving when conversation context crosses a '
+            'configured threshold (default 100k / 250k / 500k / 1M tokens). '
+            'No outbound RPCs; per-(user, chat) in-memory state.'
+        ),
+        'source_path': 'memory_save_prompt.py',
+        'needs_memory_token': False,
     },
 ]
 
@@ -468,12 +488,46 @@ def _read_filter_source(filter_def: dict) -> str:
     return path.read_text(encoding='utf-8')
 
 
-def register_filter(base_url: str, token: str, filter_def: dict) -> bool:
+def _seed_filter_valves(base_url: str, token: str, filter_def: dict, memory_token: str) -> bool:
+    """Seed the filter's valves via /api/v1/functions/id/{id}/valves/update.
+
+    Filters that talk to rm-memory (`bopa_session_context`,
+    `memory_recall_context`) need an `mcp_token` valve set or every RPC
+    401s — see Issue #49. We seed it on every registration run so the
+    deploy step can't drift from the source.
+
+    Filters that don't have an `mcp_token` field (e.g. `memory_save_prompt`,
+    which makes no outbound calls) get `valves_extras` only or nothing at
+    all — caller's choice via `valves_extras` in FILTERS entry.
+    """
+    extras = filter_def.get('valves_extras') or {}
+    valves: dict = {**extras}
+    if filter_def.get('needs_memory_token') and memory_token:
+        valves['mcp_token'] = memory_token
+    if not valves:
+        return True
+    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+    resp = requests.post(
+        f'{base_url}/api/v1/functions/id/{filter_def["id"]}/valves/update',
+        headers=headers,
+        json=valves,
+    )
+    if resp.status_code == 200:
+        keys = ', '.join(sorted(valves.keys()))
+        print(f'    -> valves seeded ({keys})')
+        return True
+    print(f'    -> valves seed FAILED: {resp.status_code}: {resp.text[:200]}')
+    return False
+
+
+def register_filter(base_url: str, token: str, filter_def: dict, memory_token: str = '') -> bool:
     """Register or update an OpenWebUI filter (Function with type='filter').
 
     The server infers `type` from the module's class definition (Pipe / Filter /
     Action), so the payload is just the FunctionForm: {id, name, content, meta}.
     Newly created functions are inactive by default — we toggle them on.
+    After install/update we seed the filter's valves; this is the step that
+    was missing pre-Issue #49 and caused all filter RPCs to silently 401.
     """
     headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
     try:
@@ -538,7 +592,11 @@ def register_filter(base_url: str, token: str, filter_def: dict) -> bool:
         print(f'    -> could not verify is_active: {get_resp.status_code}')
         # Don't fail — best-effort activation; admin can flip via UI.
 
-    return True
+    # Seed valves (e.g. mcp_token). Done last so the filter is registered
+    # and active before its config gets written. A valve-seed failure is
+    # treated as a hard failure: a filter without its token will silently
+    # 401 on every call.
+    return _seed_filter_valves(base_url, token, filter_def, memory_token)
 
 
 def dry_run_model(assistant: dict) -> bool:
@@ -589,10 +647,28 @@ def main():
         default=None,
         help=f'Override base_model_id for all assistants (default: {BASE_MODEL})',
     )
+    parser.add_argument(
+        '--memory-token',
+        default=None,
+        help=(
+            'Bearer token for the rm-memory MCP. Seeded into the mcp_token '
+            'valve of inlet filters that talk to rm-memory. Falls back to '
+            '$MEMORY_GATEWAY_TOKEN. Required for filter recall/BOPA-context '
+            'to work — see Issue #49.'
+        ),
+    )
     args = parser.parse_args()
 
     if not args.dry_run and not args.token:
         parser.error('--token is required unless --dry-run is set')
+
+    memory_token = args.memory_token or os.environ.get('MEMORY_GATEWAY_TOKEN', '')
+    if not args.dry_run and not memory_token and any(f.get('needs_memory_token') for f in FILTERS):
+        print(
+            '  ! WARNING: no --memory-token / MEMORY_GATEWAY_TOKEN set; '
+            'filters that talk to rm-memory will silently 401 (Issue #49)',
+            file=sys.stderr,
+        )
 
     if args.base_model:
         for a in ASSISTANTS:
@@ -610,7 +686,9 @@ def main():
     if args.dry_run:
         filter_success = sum(1 for f in FILTERS if dry_run_filter(f))
     else:
-        filter_success = sum(1 for f in FILTERS if register_filter(args.url, args.token, f))
+        filter_success = sum(
+            1 for f in FILTERS if register_filter(args.url, args.token, f, memory_token=memory_token)
+        )
 
     print(f'\n=== Registering {len(ASSISTANTS)} assistants{suffix} ===\n')
     if args.dry_run:

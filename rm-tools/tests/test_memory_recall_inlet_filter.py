@@ -25,22 +25,33 @@ from filters.memory_recall_context import (  # noqa: E402
     Filter,
     _format_block,
     _last_user_message,
+    _parse_mcp_response,
 )
 
 
-def _mcp_response(matches: list[dict]) -> MagicMock:
+def _mcp_response(matches: list[dict], *, framing: str = 'sse') -> MagicMock:
     """Build a MagicMock that mimics httpx.Response for a successful MCP
-    tools/call returning the given matches list."""
-    text = json.dumps({'matches': matches})
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    resp.json.return_value = {
+    tools/call returning the given matches list.
+
+    `framing='sse'` (default) returns the Streamable HTTP transport's
+    real shape: `event: message\\ndata: {...}`. `framing='json'` returns
+    pure JSON for parser-coverage tests.
+    """
+    inner = json.dumps({'matches': matches})
+    envelope = {
         'jsonrpc': '2.0',
         'id': 1,
         'result': {
-            'content': [{'type': 'text', 'text': text}],
+            'content': [{'type': 'text', 'text': inner}],
         },
     }
+    if framing == 'json':
+        body = json.dumps(envelope)
+    else:
+        body = f'event: message\ndata: {json.dumps(envelope)}\n'
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.text = body
     return resp
 
 
@@ -124,6 +135,63 @@ def test_last_user_message_handles_content_arrays():
 def test_last_user_message_returns_empty_when_no_user_turn():
     assert _last_user_message([{'role': 'system', 'content': 'sys'}]) == ''
     assert _last_user_message([]) == ''
+
+
+def test_parse_mcp_response_handles_pure_json():
+    body = json.dumps({'result': {'content': [{'type': 'text', 'text': '{"matches":[]}'}]}})
+    parsed = _parse_mcp_response(body)
+    assert parsed['result']['content'][0]['text'] == '{"matches":[]}'
+
+
+def test_parse_mcp_response_handles_sse_framing():
+    """The Streamable HTTP transport returns `event: message\\ndata: {...}`
+    when both content types are accepted (Issue #49 follow-up)."""
+    inner = '{"matches":[{"id":"x","name":"y"}]}'
+    body = (
+        'event: message\n'
+        f'data: {{"jsonrpc":"2.0","id":1,"result":{{"content":[{{"type":"text","text":{json.dumps(inner)}}}]}}}}\n'
+    )
+    parsed = _parse_mcp_response(body)
+    assert parsed['result']['content'][0]['text'] == inner
+
+
+def test_parse_mcp_response_rejects_empty_body():
+    import pytest
+    with pytest.raises(ValueError):
+        _parse_mcp_response('')
+
+
+def test_parse_mcp_response_skips_non_json_event_returns_later_valid_event():
+    """Bugbot finding on PR #52: a strict json.loads in the SSE loop
+    would abort on an early non-JSON data event (notification, keep-alive)
+    and discard a valid result that arrives in a subsequent event. The
+    parser should now skip the non-JSON event and keep parsing."""
+    inner = '{"matches":[{"id":"x"}]}'
+    body = (
+        'event: notification\n'
+        'data: heartbeat\n'  # not JSON — must be skipped, not raised
+        '\n'
+        'event: message\n'
+        f'data: {{"jsonrpc":"2.0","id":1,"result":{{"content":[{{"type":"text","text":{json.dumps(inner)}}}]}}}}\n'
+    )
+    parsed = _parse_mcp_response(body)
+    assert parsed['result']['content'][0]['text'] == inner
+
+
+def test_parse_mcp_response_picks_last_valid_when_trailing_event_is_garbage():
+    """If a valid event is followed by a malformed one, the parser keeps
+    the last valid payload — failing open is better than discarding a
+    real result for a stray notification."""
+    inner = '{"matches":[]}'
+    body = (
+        'event: message\n'
+        f'data: {{"jsonrpc":"2.0","id":1,"result":{{"content":[{{"type":"text","text":{json.dumps(inner)}}}]}}}}\n'
+        '\n'
+        'event: keepalive\n'
+        'data: pong\n'
+    )
+    parsed = _parse_mcp_response(body)
+    assert parsed['result']['content'][0]['text'] == inner
 
 
 def test_format_block_lists_name_description_and_scope():
@@ -314,3 +382,71 @@ def test_query_uses_last_user_message_not_first():
     sent = post_mock.call_args.kwargs.get('json') or post_mock.call_args.args[0]
     args = sent['params']['arguments']
     assert args['query'] == 'tweede vraag over Den Haag'
+
+
+# --- Issue #49 wiring ----------------------------------------------------
+
+
+def test_x_forwarded_user_header_set_from_user_email():
+    """X-Forwarded-User must carry the end-user's email so rm-memory can
+    apply server-side per-user scoping (Issue #49)."""
+    f = Filter()
+    f.valves.cache_ttl_s = 0
+    f.valves.mcp_token = 'gateway-secret'
+    patcher, post_mock = _patch_async_client(_mcp_response([_match()]))
+    with patcher:
+        _run(
+            f.inlet(
+                _make_body(),
+                __user__={'id': 'openwebui-uuid', 'email': 'ralph@example.org'},
+                __metadata__={'model_id': 'rm-assistent'},
+            )
+        )
+    headers = post_mock.call_args.kwargs.get('headers') or {}
+    assert headers.get('X-Forwarded-User') == 'ralph@example.org'
+    assert headers.get('Authorization') == 'Bearer gateway-secret'
+
+
+def test_no_x_forwarded_user_header_when_email_missing():
+    """If the user object has no email, the request still goes out with
+    Authorization but no X-Forwarded-User. The MCP will then 401 — but
+    that's an upstream config issue, not the filter's bug."""
+    f = Filter()
+    f.valves.cache_ttl_s = 0
+    f.valves.mcp_token = 'gateway-secret'
+    patcher, post_mock = _patch_async_client(_mcp_response([_match()]))
+    with patcher:
+        _run(
+            f.inlet(
+                _make_body(),
+                __user__={'id': 'openwebui-uuid'},  # no 'email'
+                __metadata__={'model_id': 'rm-assistent'},
+            )
+        )
+    headers = post_mock.call_args.kwargs.get('headers') or {}
+    assert 'X-Forwarded-User' not in headers
+    assert headers.get('Authorization') == 'Bearer gateway-secret'
+
+
+def test_match_with_clerk_owner_id_is_returned_not_filtered():
+    """rm-memory stores entries with `clerk:<email>` owner_user_id while
+    OpenWebUI's user.id is a UUID. The previous client-side post-filter
+    compared these and silently discarded everything (Issue #49). Now the
+    server scopes via X-Forwarded-User and the filter trusts the result."""
+    f = Filter()
+    f.valves.cache_ttl_s = 0
+    matches = [
+        {**_match(name='ralph-pref'), 'owner_user_id': 'clerk:ralph@example.org'},
+    ]
+    patcher, _post = _patch_async_client(_mcp_response(matches))
+    with patcher:
+        body = _run(
+            f.inlet(
+                _make_body(),
+                __user__={'id': 'openwebui-uuid', 'email': 'ralph@example.org'},
+                __metadata__={'model_id': 'rm-assistent'},
+            )
+        )
+    sys_msg = body['messages'][0]['content']
+    assert 'EERDER OPGESLAGEN MEMORIES' in sys_msg
+    assert 'ralph-pref' in sys_msg
