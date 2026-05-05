@@ -161,6 +161,39 @@ def test_parse_mcp_response_rejects_empty_body():
         _parse_mcp_response('')
 
 
+def test_parse_mcp_response_skips_non_json_event_returns_later_valid_event():
+    """Bugbot finding on PR #52: a strict json.loads in the SSE loop
+    would abort on an early non-JSON data event (notification, keep-alive)
+    and discard a valid result that arrives in a subsequent event. The
+    parser should now skip the non-JSON event and keep parsing."""
+    inner = '{"matches":[{"id":"x"}]}'
+    body = (
+        'event: notification\n'
+        'data: heartbeat\n'  # not JSON — must be skipped, not raised
+        '\n'
+        'event: message\n'
+        f'data: {{"jsonrpc":"2.0","id":1,"result":{{"content":[{{"type":"text","text":{json.dumps(inner)}}}]}}}}\n'
+    )
+    parsed = _parse_mcp_response(body)
+    assert parsed['result']['content'][0]['text'] == inner
+
+
+def test_parse_mcp_response_picks_last_valid_when_trailing_event_is_garbage():
+    """If a valid event is followed by a malformed one, the parser keeps
+    the last valid payload — failing open is better than discarding a
+    real result for a stray notification."""
+    inner = '{"matches":[]}'
+    body = (
+        'event: message\n'
+        f'data: {{"jsonrpc":"2.0","id":1,"result":{{"content":[{{"type":"text","text":{json.dumps(inner)}}}]}}}}\n'
+        '\n'
+        'event: keepalive\n'
+        'data: pong\n'
+    )
+    parsed = _parse_mcp_response(body)
+    assert parsed['result']['content'][0]['text'] == inner
+
+
 def test_format_block_lists_name_description_and_scope():
     block = _format_block([_match(name='foo', description='bar', scope='user')])
     assert 'EERDER OPGESLAGEN MEMORIES' in block

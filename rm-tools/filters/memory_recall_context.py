@@ -60,33 +60,47 @@ def _parse_mcp_response(text: str) -> dict:
     `Accept: application/json, text/event-stream` is requested, which the
     MCP server now mandates — Issue #49 follow-up). We accept both.
 
-    Pure function. Raises ValueError on a body that isn't either shape.
+    Multiple SSE events are tolerated: the last event whose data is
+    valid JSON wins. Non-JSON data events (e.g. session-management
+    notifications, keep-alives) are skipped silently rather than
+    aborting the parse — a strict json.loads inside the loop would lose
+    a valid result that comes after a non-JSON event (Bugbot review on
+    PR #52).
+
+    Pure function. Raises ValueError if no data event yielded valid JSON.
     """
     if not text:
         raise ValueError('empty response body')
     stripped = text.lstrip()
     if stripped.startswith('{'):
         return json.loads(stripped)
-    # SSE: read each `data: …` payload and return the last (and usually
-    # only) one. Multiple data lines in a single event get concatenated
-    # per the spec; multiple events are rare for tools/call but pick the
-    # last so the final result wins.
     last_payload: dict | None = None
+
+    def _try_consume(buf: list[str]) -> None:
+        """Attempt to JSON-parse the joined data lines and update the
+        accumulator. Non-JSON payloads are skipped, not raised."""
+        nonlocal last_payload
+        joined = '\n'.join(buf).strip()
+        if not joined:
+            return
+        try:
+            parsed = json.loads(joined)
+        except ValueError:
+            return
+        if isinstance(parsed, dict):
+            last_payload = parsed
+
     data_buf: list[str] = []
     for line in text.splitlines():
         if line.startswith('data:'):
             data_buf.append(line[5:].lstrip())
         elif line == '' and data_buf:
-            joined = '\n'.join(data_buf).strip()
+            _try_consume(data_buf)
             data_buf = []
-            if joined:
-                last_payload = json.loads(joined)
     if data_buf:
-        joined = '\n'.join(data_buf).strip()
-        if joined:
-            last_payload = json.loads(joined)
+        _try_consume(data_buf)
     if last_payload is None:
-        raise ValueError('SSE body had no data lines')
+        raise ValueError('SSE body had no JSON data event')
     return last_payload
 
 
