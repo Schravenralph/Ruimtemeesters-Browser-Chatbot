@@ -37,6 +37,7 @@ PHASE_SLASH_COMMANDS = {
     1: '/bopa-haalbaarheid',
     2: '/bopa-strijdigheid',
     3: '/bopa-beleid',
+    4: '/bopa-omgevingsaspecten',
 }
 
 
