@@ -268,6 +268,32 @@ def test_malformed_response_propagates_as_502(monkeypatch):
     assert exc.value.status_code == 502
 
 
+def test_validation_error_propagates_as_502(monkeypatch):
+    """Bugbot finding on PR #58: when the MCP returns a payload that
+    doesn't match ListMemoriesOutput, the endpoint must surface a 502
+    (gateway-level fault), not let the Pydantic ValidationError leak
+    as a 500. Mirrors the same guard on admin_memory.py."""
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+    from open_webui.utils.auth import get_verified_user
+
+    bad_payload = {'entries': [{'name': 'x'}]}  # missing required type/scope/etc
+    patcher, _ = _patch_async_client(_sse_response(bad_payload))
+
+    app.dependency_overrides[get_verified_user] = lambda: type('U', (), {'id': 'u', 'email': 'a@x'})()
+    try:
+        with patcher:
+            client = TestClient(app)
+            res = client.get('/api/v1/rm-memory/list')
+        assert res.status_code == 502, f'expected 502, got {res.status_code}: {res.text}'
+        assert 'unexpected payload shape' in res.text.lower()
+    finally:
+        app.dependency_overrides.pop(get_verified_user, None)
+
+
 def test_mcp_error_envelope_propagates_as_502(monkeypatch):
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
     err_envelope = {
