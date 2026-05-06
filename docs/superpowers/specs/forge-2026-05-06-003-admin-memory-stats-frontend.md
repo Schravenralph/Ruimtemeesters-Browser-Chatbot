@@ -8,7 +8,7 @@ A new admin-only Svelte route at `/admin/memory` that calls cycle-2's BFF (`GET 
 
 ## Why
 
-Cycle 2 shipped the BFF; advisors and operators still can't see the data without curl. This route is what an admin opens to answer *"is anyone using memory yet?"* in a glance — the entire reason for issue #48. Closes the loop on the BFF's user value and removes the SSH-and-curl detour that was the original pain.
+Cycle 2 shipped the BFF; advisors and operators still can't see the data without curl. This route is what an admin opens to answer _"is anyone using memory yet?"_ in a glance — the entire reason for issue #48. Closes the loop on the BFF's user value and removes the SSH-and-curl detour that was the original pain.
 
 ## Success criteria
 
