@@ -42,7 +42,11 @@ export const getAdoptionStats = async (
 	token: string,
 	sinceDays?: number
 ): Promise<AdoptionStats> => {
+	// `error` and `caught` together: an empty-string detail is still an error
+	// (a truthy-only check would let `null` leak as AdoptionStats — Bugbot
+	// finding on PR #57).
 	let error: { detail?: string } | string | null = null;
+	let caught = false;
 
 	const url = new URL(`${WEBUI_API_BASE_URL}/admin/memory/stats`, window.location.origin);
 	if (sinceDays !== undefined) {
@@ -63,11 +67,12 @@ export const getAdoptionStats = async (
 		.catch((err) => {
 			console.error(err);
 			error = err?.detail ?? err;
+			caught = true;
 			return null;
 		});
 
-	if (error) {
-		throw error;
+	if (caught) {
+		throw error ?? 'request failed';
 	}
 	return res as AdoptionStats;
 };
