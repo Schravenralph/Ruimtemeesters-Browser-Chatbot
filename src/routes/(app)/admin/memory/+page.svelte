@@ -50,20 +50,21 @@
 </script>
 
 <svelte:head>
-	<title>Memory adoption · Admin</title>
+	<title>{$i18n.t('Memory adoption')} · {$i18n.t('Admin')}</title>
 </svelte:head>
 
 <div class="px-4 py-3 max-w-5xl mx-auto w-full">
 	<div class="flex items-center justify-between mb-4">
 		<div>
-			<h2 class="text-lg font-semibold">Memory adoption</h2>
+			<h2 class="text-lg font-semibold">{$i18n.t('Memory adoption')}</h2>
 			<p class="text-xs text-gray-500 dark:text-gray-400">
-				Cross-user counts from <code>get_adoption_stats</code>. Admin only.
+				{$i18n.t('Cross-user counts from')}
+				<code>get_adoption_stats</code>. {$i18n.t('Admin only.')}
 			</p>
 		</div>
 
 		<div class="flex items-center gap-2 text-sm">
-			<label for="since-days" class="text-gray-500">Window</label>
+			<label for="since-days" class="text-gray-500">{$i18n.t('Window')}</label>
 			<select
 				id="since-days"
 				bind:value={sinceDays}
@@ -81,7 +82,7 @@
 				on:click={refresh}
 				disabled={loading}
 			>
-				Refresh
+				{$i18n.t('Refresh')}
 			</button>
 		</div>
 	</div>
@@ -94,18 +95,24 @@
 		<div
 			class="rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-800 dark:text-red-200"
 		>
-			<div class="font-medium">Couldn't load memory stats</div>
+			<div class="font-medium">{$i18n.t("Couldn't load memory stats")}</div>
 			<div class="text-xs mt-0.5">{errorMsg}</div>
 			{#if errorMsg.toLowerCase().includes('memory_admin_token')}
 				<div class="text-xs mt-1 opacity-75">
-					Set <code>MEMORY_ADMIN_TOKEN</code> in the chatbot env (matches the value in MCP-Servers compose)
-					and restart the backend.
+					{$i18n.t('Set')}
+					<code>MEMORY_ADMIN_TOKEN</code>
+					{$i18n.t(
+						'in the chatbot env (matches the value in MCP-Servers compose) and restart the backend.'
+					)}
 				</div>
 			{/if}
 		</div>
 	{:else if stats}
 		<div class="text-xs text-gray-500 mb-3">
-			Snapshot at {formatTimestamp(stats.measured_at)} · window {stats.session_events.window_days}d
+			{$i18n.t('Snapshot at {{measuredAt}} · window {{windowDays}}d', {
+				measuredAt: formatTimestamp(stats.measured_at),
+				windowDays: stats.session_events.window_days
+			})}
 		</div>
 
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -114,20 +121,20 @@
 				class="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
 			>
 				<header class="flex items-baseline justify-between mb-2">
-					<h3 class="text-sm font-semibold">Entries</h3>
+					<h3 class="text-sm font-semibold">{$i18n.t('Entries')}</h3>
 					<span class="text-2xl font-semibold">{stats.entries.total}</span>
 				</header>
 				{#if stats.entries.by_scope_and_type.length === 0}
 					<p class="text-xs text-gray-500">
-						No entries yet — the assistant will save them as users chat.
+						{$i18n.t('No entries yet — the assistant will save them as users chat.')}
 					</p>
 				{:else}
 					<table class="w-full text-xs">
 						<thead class="text-gray-500">
 							<tr>
-								<th class="text-left font-normal py-1">scope</th>
-								<th class="text-left font-normal py-1">type</th>
-								<th class="text-right font-normal py-1">count</th>
+								<th class="text-left font-normal py-1">{$i18n.t('scope')}</th>
+								<th class="text-left font-normal py-1">{$i18n.t('type')}</th>
+								<th class="text-right font-normal py-1">{$i18n.t('count')}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -142,7 +149,10 @@
 					</table>
 				{/if}
 				<div class="mt-2 text-xs text-gray-500">
-					{stats.users} users · {stats.projects} projects
+					{$i18n.t('{{users}} users · {{projects}} projects', {
+						users: stats.users,
+						projects: stats.projects
+					})}
 				</div>
 			</section>
 
@@ -151,21 +161,23 @@
 				class="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
 			>
 				<header class="flex items-baseline justify-between mb-2">
-					<h3 class="text-sm font-semibold">BOPA sessions</h3>
+					<h3 class="text-sm font-semibold">{$i18n.t('BOPA sessions')}</h3>
 					<span class="text-2xl font-semibold">{stats.bopa_sessions.total}</span>
 				</header>
 				<div class="text-sm">
 					<span class="font-medium text-emerald-700 dark:text-emerald-400"
 						>{stats.bopa_sessions.active}</span
 					>
-					<span class="text-gray-500"> active</span>
+					<span class="text-gray-500"> {$i18n.t('active')}</span>
 					<span class="text-gray-400"> · </span>
 					<span class="font-medium">{stats.bopa_sessions.total - stats.bopa_sessions.active}</span>
-					<span class="text-gray-500"> archived/completed</span>
+					<span class="text-gray-500"> {$i18n.t('archived/completed')}</span>
 				</div>
 				{#if stats.bopa_sessions.total === 0}
 					<p class="text-xs text-gray-500 mt-2">
-						No BOPA sessions yet. Try <code>/bopa-haalbaarheid &lt;adres&gt;</code> in chat.
+						{$i18n.t('No BOPA sessions yet. Try')}
+						<code>/bopa-haalbaarheid &lt;adres&gt;</code>
+						{$i18n.t('in chat.')}
 					</p>
 				{/if}
 			</section>
@@ -176,29 +188,32 @@
 			>
 				<header class="flex items-baseline justify-between mb-2">
 					<h3 class="text-sm font-semibold">
-						Recent activity <span class="text-gray-500 font-normal text-xs"
-							>(last {stats.session_events.window_days}d)</span
+						{$i18n.t('Recent activity')}
+						<span class="text-gray-500 font-normal text-xs"
+							>{$i18n.t('(last {{windowDays}}d)', {
+								windowDays: stats.session_events.window_days
+							})}</span
 						>
 					</h3>
 					<span class="text-2xl font-semibold">{stats.session_events.total}</span>
 				</header>
 				<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
 					<div>
-						<div class="text-xs text-gray-500">Recall calls</div>
+						<div class="text-xs text-gray-500">{$i18n.t('Recall calls')}</div>
 						<div class="font-medium">{stats.session_events.recall.calls}</div>
 					</div>
 					<div>
-						<div class="text-xs text-gray-500">Recall hit rate</div>
+						<div class="text-xs text-gray-500">{$i18n.t('Recall hit rate')}</div>
 						<div class="font-medium">
 							{stats.session_events.recall.calls === 0 ? '—' : formatPct(recallHitRate(stats))}
 						</div>
 					</div>
 					<div>
-						<div class="text-xs text-gray-500">Save calls</div>
+						<div class="text-xs text-gray-500">{$i18n.t('Save calls')}</div>
 						<div class="font-medium">{stats.session_events.save.calls}</div>
 					</div>
 					<div>
-						<div class="text-xs text-gray-500">Notes</div>
+						<div class="text-xs text-gray-500">{$i18n.t('Notes')}</div>
 						<div class="font-medium">{stats.session_events.notes}</div>
 					</div>
 				</div>
@@ -206,10 +221,10 @@
 					<table class="w-full text-xs mt-3">
 						<thead class="text-gray-500">
 							<tr>
-								<th class="text-left font-normal py-1">tool</th>
-								<th class="text-right font-normal py-1">calls</th>
-								<th class="text-right font-normal py-1">errors</th>
-								<th class="text-right font-normal py-1">err rate</th>
+								<th class="text-left font-normal py-1">{$i18n.t('tool')}</th>
+								<th class="text-right font-normal py-1">{$i18n.t('calls')}</th>
+								<th class="text-right font-normal py-1">{$i18n.t('errors')}</th>
+								<th class="text-right font-normal py-1">{$i18n.t('err rate')}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -238,19 +253,20 @@
 			>
 				<header class="flex items-baseline justify-between mb-2">
 					<h3 class="text-sm font-semibold">
-						Top users <span class="text-gray-500 font-normal text-xs"
-							>(by entry count, top {TOP_USERS})</span
+						{$i18n.t('Top users')}
+						<span class="text-gray-500 font-normal text-xs"
+							>{$i18n.t('(by entry count, top {{n}})', { n: TOP_USERS })}</span
 						>
 					</h3>
 				</header>
 				{#if stats.entries.by_user.length === 0}
-					<p class="text-xs text-gray-500">No per-user activity yet.</p>
+					<p class="text-xs text-gray-500">{$i18n.t('No per-user activity yet.')}</p>
 				{:else}
 					<table class="w-full text-xs">
 						<thead class="text-gray-500">
 							<tr>
-								<th class="text-left font-normal py-1">owner_user_id</th>
-								<th class="text-right font-normal py-1">entries</th>
+								<th class="text-left font-normal py-1">{$i18n.t('owner_user_id')}</th>
+								<th class="text-right font-normal py-1">{$i18n.t('entries')}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -264,7 +280,9 @@
 					</table>
 					{#if stats.entries.by_user.length > TOP_USERS}
 						<div class="text-xs text-gray-500 mt-1">
-							… and {stats.entries.by_user.length - TOP_USERS} more
+							{$i18n.t('… and {{count}} more', {
+								count: stats.entries.by_user.length - TOP_USERS
+							})}
 						</div>
 					{/if}
 				{/if}
