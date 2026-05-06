@@ -40,7 +40,14 @@ def parse_mcp_response(text: str) -> dict:
         raise ValueError('empty response body')
     stripped = text.lstrip()
     if stripped.startswith('{'):
-        return json.loads(stripped)
+        parsed = json.loads(stripped)
+        if not isinstance(parsed, dict):
+            # JSON-RPC envelopes are always objects. A bare array or `null`
+            # would otherwise slip past the brace-prefix shortcut and crash
+            # extract_tool_result with AttributeError → 500. Reject up
+            # front so the gateway-level fault surfaces as 502.
+            raise ValueError('JSON body is not an object')
+        return parsed
 
     response_payload: dict | None = None  # first event with result/error
     fallback_payload: dict | None = None  # last otherwise-valid dict

@@ -231,6 +231,21 @@ def test_mcp_error_envelope_propagates_as_502(monkeypatch):
     assert 'forbidden' in exc.value.detail.lower()
 
 
+def test_non_object_json_body_propagates_as_502(monkeypatch):
+    """Bugbot finding (low) on PR #56: a JSON body that is a bare array
+    or `null` would slip past the brace-prefix shortcut and crash
+    extract_tool_result with AttributeError → 500. Must surface as 502."""
+    monkeypatch.setenv('MEMORY_ADMIN_TOKEN', 'sekret')
+    bad = MagicMock()
+    bad.raise_for_status = MagicMock()
+    bad.text = '[]'
+    patcher, _ = _patch_async_client(bad)
+    with patcher:
+        with pytest.raises(HTTPException) as exc:
+            _run(_call_get_adoption_stats(since_days=None))
+    assert exc.value.status_code == 502
+
+
 def test_late_notification_does_not_clobber_result(monkeypatch):
     """Bugbot finding on PR #56: a JSON-RPC notification arriving after
     the response must NOT overwrite the response payload. The parser
