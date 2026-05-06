@@ -127,6 +127,12 @@ services:
       # Leave blank to keep the admin endpoint offline (chatbot returns 503
       # with a clear "not configured" detail).
       - MEMORY_ADMIN_TOKEN=${MEMORY_ADMIN_TOKEN:-}
+      # --- rm-memory user-facing BFF ---
+      # The same gateway token is interpolated into TOOL_SERVER_CONNECTIONS
+      # above for the LLM-tool path, but /api/v1/rm-memory/list reads it
+      # from os.environ — needs an explicit export here so the BFF works in
+      # the documented compose deployment.
+      - MEMORY_GATEWAY_TOKEN=${MEMORY_GATEWAY_TOKEN:-}
       # MCP URL is hard-coded to the compose-internal hostname; override only
       # when running the chatbot backend outside the rm-internal network.
       - RM_MEMORY_MCP_URL=${RM_MEMORY_MCP_URL:-http://rm-mcp-memory:3200/mcp}
