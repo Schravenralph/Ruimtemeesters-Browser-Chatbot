@@ -82,7 +82,13 @@
 			<select
 				id="since-days"
 				bind:value={sinceDays}
-				on:change={refresh}
+				on:change={(e) => {
+					// Read directly from the event so refresh sees the new
+					// value even if any future Svelte version delays the
+					// bind:value commit (Bugbot finding on PR #59).
+					sinceDays = Number((e.target as HTMLSelectElement).value);
+					refresh();
+				}}
 				class="rounded-sm bg-transparent border border-gray-200 dark:border-gray-700 px-1 py-0.5"
 			>
 				<option value={1}>1d</option>
