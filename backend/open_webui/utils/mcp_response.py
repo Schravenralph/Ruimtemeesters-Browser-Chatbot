@@ -93,8 +93,16 @@ def extract_tool_result(envelope: dict) -> dict:
     caller can map them to an HTTP response.
     """
     if 'error' in envelope:
-        err = envelope['error'] or {}
-        msg = err.get('message') or 'MCP returned an error'
+        err = envelope['error']
+        # JSON-RPC spec says `error` is an object with `code`+`message`.
+        # Tolerate stringly-typed or null errors so a non-conforming server
+        # can't crash extract_tool_result with AttributeError → 500.
+        if isinstance(err, dict):
+            msg = err.get('message') or 'MCP returned an error'
+        elif isinstance(err, str) and err:
+            msg = err
+        else:
+            msg = 'MCP returned an error'
         raise ValueError(f'MCP error: {msg}')
     result = envelope.get('result')
     if not isinstance(result, dict):

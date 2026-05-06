@@ -231,6 +231,28 @@ def test_mcp_error_envelope_propagates_as_502(monkeypatch):
     assert 'forbidden' in exc.value.detail.lower()
 
 
+def test_string_error_envelope_propagates_as_502(monkeypatch):
+    """Bugbot finding (low) on PR #56: a JSON-RPC envelope whose `error`
+    field is a bare string (non-conforming server) used to AttributeError
+    out of extract_tool_result → 500. Now tolerated as 502 with the
+    string used directly as the message."""
+    monkeypatch.setenv('MEMORY_ADMIN_TOKEN', 'sekret')
+    err_envelope = {
+        'jsonrpc': '2.0',
+        'id': 'x',
+        'error': 'forbidden — non-dict shape',
+    }
+    bad = MagicMock()
+    bad.raise_for_status = MagicMock()
+    bad.text = f'event: message\ndata: {json.dumps(err_envelope)}\n'
+    patcher, _ = _patch_async_client(bad)
+    with patcher:
+        with pytest.raises(HTTPException) as exc:
+            _run(_call_get_adoption_stats(since_days=None))
+    assert exc.value.status_code == 502
+    assert 'forbidden' in exc.value.detail.lower()
+
+
 def test_non_object_json_body_propagates_as_502(monkeypatch):
     """Bugbot finding (low) on PR #56: a JSON body that is a bare array
     or `null` would slip past the brace-prefix shortcut and crash
