@@ -48,12 +48,14 @@ export const getAdoptionStats = async (
 	let error: { detail?: string } | string | null = null;
 	let caught = false;
 
-	const url = new URL(`${WEBUI_API_BASE_URL}/admin/memory/stats`, window.location.origin);
+	const params = new URLSearchParams();
 	if (sinceDays !== undefined) {
-		url.searchParams.set('since_days', String(sinceDays));
+		params.set('since_days', String(sinceDays));
 	}
+	const qs = params.toString();
+	const url = `${WEBUI_API_BASE_URL}/admin/memory/stats${qs ? `?${qs}` : ''}`;
 
-	const res = await fetch(url.toString(), {
+	const res = await fetch(url, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',
