@@ -21,7 +21,11 @@
 		try {
 			stats = await getAdoptionStats(localStorage.token, sinceDays);
 		} catch (e: any) {
-			errorMsg = typeof e === 'string' ? e : (e?.detail ?? String(e));
+			// Always end with a non-empty string so the {:else if errorMsg}
+			// branch always renders — an empty string would be falsy and
+			// blank the panel (Bugbot finding on PR #59, belt-and-braces).
+			const raw = typeof e === 'string' ? e : (e?.detail ?? String(e));
+			errorMsg = raw || 'request failed';
 			stats = null;
 		} finally {
 			loading = false;

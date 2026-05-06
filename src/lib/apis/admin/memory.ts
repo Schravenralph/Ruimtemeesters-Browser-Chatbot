@@ -74,7 +74,10 @@ export const getAdoptionStats = async (
 		});
 
 	if (caught) {
-		throw error ?? 'request failed';
+		// Use truthy check so an empty-string `detail` doesn't throw "" —
+		// an empty string would hit the page's `{:else if errorMsg}` as
+		// falsy and blank the whole panel (Bugbot finding on PR #59).
+		throw error || 'request failed';
 	}
 	return res as AdoptionStats;
 };
