@@ -1,7 +1,8 @@
 """Unit tests for backend/open_webui/routers/rm_memory.py.
 
-Exercises `_call_list_memories` directly and mocks `httpx.AsyncClient`.
-No FastAPI test client, no DB.
+Direct-helper tests exercise `_call_user_tool` and mock httpx.AsyncClient.
+Endpoint tests use FastAPI's TestClient with the auth dependency
+overridden — no DB, no real network.
 
 Run with:
     pytest backend/open_webui/test/util/test_rm_memory.py -v
@@ -19,12 +20,12 @@ from fastapi import HTTPException
 
 from open_webui.routers.rm_memory import (
     ListMemoriesOutput,
-    _call_list_memories,
+    _call_user_tool,
     _resolve_gateway_token,
 )
 
 
-SAMPLE_OUTPUT = {
+SAMPLE_LIST = {
     'entries': [
         {
             'name': 'identity',
@@ -46,6 +47,31 @@ SAMPLE_OUTPUT = {
         },
     ],
 }
+
+SAMPLE_GET = {
+    'id': 'uuid-1',
+    'name': 'identity',
+    'type': 'user',
+    'scope': 'user',
+    'description': 'sole admin, never use other RM emails',
+    'content': 'Ralph is the sole admin; never use other RM emails.',
+    'owner_user_id': 'clerk:ralph',
+    'project_id': None,
+    'created_at': '2026-04-01T00:00:00.000Z',
+    'updated_at': '2026-05-01T12:00:00.000Z',
+}
+
+SAMPLE_SAVE = {
+    'id': 'uuid-1',
+    'name': 'identity',
+    'type': 'user',
+    'scope': 'user',
+    'project_id': None,
+    'created': False,
+    'updated': True,
+}
+
+SAMPLE_FORGET = {'deleted': True, 'rows': 1}
 
 
 def _sse_response(payload: dict, *, framing: str = 'sse') -> MagicMock:
@@ -86,6 +112,20 @@ def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
+def _override_user(email: str | None = 'ralph@example.org'):
+    """Build a (patcher, undo) pair that overrides get_verified_user on
+    the FastAPI app for the duration of a test. Used by endpoint-level
+    tests that go through TestClient."""
+    from open_webui.main import app  # noqa: PLC0415
+    from open_webui.utils.auth import get_verified_user  # noqa: PLC0415
+
+    def _fake():
+        return type('U', (), {'id': 'u', 'email': email})()
+
+    app.dependency_overrides[get_verified_user] = _fake
+    return lambda: app.dependency_overrides.pop(get_verified_user, None)
+
+
 # --- gateway token ---------------------------------------------------------
 
 
@@ -104,151 +144,96 @@ def test_blank_gateway_token_returns_503(monkeypatch):
     assert exc.value.status_code == 503
 
 
-# --- happy path ------------------------------------------------------------
+# --- _call_user_tool happy path -------------------------------------------
 
 
-def test_happy_path_returns_typed_payload(monkeypatch):
+def test_call_user_tool_forwards_email_and_token(monkeypatch):
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
     monkeypatch.setenv('RM_MEMORY_MCP_URL', 'http://test-memory:3200/mcp')
 
-    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_OUTPUT))
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_LIST))
     with patcher:
         payload = _run(
-            _call_list_memories(
+            _call_user_tool(
+                tool_name='list_memories',
+                arguments={'scope': 'user'},
                 user_email='ralph@example.org',
-                scope=None,
-                project_id=None,
-                memory_type=None,
-                limit=None,
             )
         )
 
-    typed = ListMemoriesOutput.model_validate(payload)
-    assert len(typed.entries) == 2
-    assert typed.entries[0].name == 'identity'
-    assert typed.entries[1].project_id == '7'
-
+    assert len(payload['entries']) == 2
     call = post_mock.call_args
     assert call.args[0] == 'http://test-memory:3200/mcp'
     body = call.kwargs['json']
     assert body['method'] == 'tools/call'
     assert body['params']['name'] == 'list_memories'
-    # No optional args passed → empty arguments object.
-    assert body['params']['arguments'] == {}
+    assert body['params']['arguments'] == {'scope': 'user'}
 
     headers = call.kwargs['headers']
     assert headers['Authorization'] == 'Bearer gateway-secret'
-    assert headers['X-Forwarded-User'] == 'ralph@example.org', (
-        'User-facing endpoint must forward identity so MCP can apply per-user scoping.'
-    )
+    assert headers['X-Forwarded-User'] == 'ralph@example.org'
     assert 'application/json' in headers['Accept']
     assert 'text/event-stream' in headers['Accept']
 
 
-def test_optional_args_pass_through(monkeypatch):
+def test_call_user_tool_omits_x_forwarded_user_when_missing(monkeypatch):
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
-
-    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_OUTPUT))
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_LIST))
     with patcher:
         _run(
-            _call_list_memories(
-                user_email='ralph@example.org',
-                scope='project',
-                project_id='42',
-                memory_type='feedback',
-                limit=10,
-            )
-        )
-
-    args = post_mock.call_args.kwargs['json']['params']['arguments']
-    assert args == {
-        'scope': 'project',
-        'project_id': '42',
-        'type': 'feedback',
-        'limit': 10,
-    }
-
-
-def test_missing_email_omits_x_forwarded_user(monkeypatch):
-    """If user.email is None, the BFF must NOT fabricate the header. The
-    MCP will then 401 — that surfaces as 502 to the caller, which is the
-    correct behavior (matches bopa_session_context)."""
-    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
-
-    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_OUTPUT))
-    with patcher:
-        _run(
-            _call_list_memories(
+            _call_user_tool(
+                tool_name='list_memories',
+                arguments={},
                 user_email=None,
-                scope=None,
-                project_id=None,
-                memory_type=None,
-                limit=None,
             )
         )
-
     headers = post_mock.call_args.kwargs['headers']
     assert 'X-Forwarded-User' not in headers
 
 
-def test_pure_json_framing_also_parses(monkeypatch):
-    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
-    patcher, _ = _patch_async_client(_sse_response(SAMPLE_OUTPUT, framing='json'))
-    with patcher:
-        payload = _run(
-            _call_list_memories(
-                user_email='ralph@example.org',
-                scope=None,
-                project_id=None,
-                memory_type=None,
-                limit=None,
-            )
-        )
-    assert len(payload['entries']) == 2
+# --- failure modes (shared transport) -------------------------------------
 
 
-# --- failure modes ---------------------------------------------------------
-
-
-def test_mcp_502_propagates_as_502(monkeypatch):
+def test_call_user_tool_502_propagates_with_upstream_body(monkeypatch):
+    """HTTPStatusError must surface as 502, with the upstream response
+    body included in the detail (Bugbot finding on PR #60)."""
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
     failing = MagicMock()
+    failing_response = MagicMock(status_code=502)
+    failing_response.text = 'Bad Gateway: upstream timeout'
     failing.raise_for_status.side_effect = httpx.HTTPStatusError(
-        '502 Bad Gateway', request=MagicMock(), response=MagicMock(status_code=502)
+        '502 Bad Gateway', request=MagicMock(), response=failing_response
     )
     patcher, _ = _patch_async_client(failing)
     with patcher:
         with pytest.raises(HTTPException) as exc:
             _run(
-                _call_list_memories(
+                _call_user_tool(
+                    tool_name='list_memories',
+                    arguments={},
                     user_email='ralph@example.org',
-                    scope=None,
-                    project_id=None,
-                    memory_type=None,
-                    limit=None,
                 )
             )
     assert exc.value.status_code == 502
+    assert 'Bad Gateway: upstream timeout' in exc.value.detail
 
 
-def test_mcp_timeout_propagates_as_502(monkeypatch):
+def test_call_user_tool_timeout_propagates_as_502(monkeypatch):
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
     patcher, _ = _patch_async_client(post_side_effect=httpx.TimeoutException('timed out'))
     with patcher:
         with pytest.raises(HTTPException) as exc:
             _run(
-                _call_list_memories(
+                _call_user_tool(
+                    tool_name='list_memories',
+                    arguments={},
                     user_email='ralph@example.org',
-                    scope=None,
-                    project_id=None,
-                    memory_type=None,
-                    limit=None,
                 )
             )
     assert exc.value.status_code == 502
 
 
-def test_malformed_response_propagates_as_502(monkeypatch):
+def test_call_user_tool_malformed_propagates_as_502(monkeypatch):
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
     bad = MagicMock()
     bad.raise_for_status = MagicMock()
@@ -257,44 +242,16 @@ def test_malformed_response_propagates_as_502(monkeypatch):
     with patcher:
         with pytest.raises(HTTPException) as exc:
             _run(
-                _call_list_memories(
+                _call_user_tool(
+                    tool_name='list_memories',
+                    arguments={},
                     user_email='ralph@example.org',
-                    scope=None,
-                    project_id=None,
-                    memory_type=None,
-                    limit=None,
                 )
             )
     assert exc.value.status_code == 502
 
 
-def test_validation_error_propagates_as_502(monkeypatch):
-    """Bugbot finding on PR #58: when the MCP returns a payload that
-    doesn't match ListMemoriesOutput, the endpoint must surface a 502
-    (gateway-level fault), not let the Pydantic ValidationError leak
-    as a 500. Mirrors the same guard on admin_memory.py."""
-    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
-
-    from fastapi.testclient import TestClient
-
-    from open_webui.main import app  # noqa: PLC0415
-    from open_webui.utils.auth import get_verified_user
-
-    bad_payload = {'entries': [{'name': 'x'}]}  # missing required type/scope/etc
-    patcher, _ = _patch_async_client(_sse_response(bad_payload))
-
-    app.dependency_overrides[get_verified_user] = lambda: type('U', (), {'id': 'u', 'email': 'a@x'})()
-    try:
-        with patcher:
-            client = TestClient(app)
-            res = client.get('/api/v1/rm-memory/list')
-        assert res.status_code == 502, f'expected 502, got {res.status_code}: {res.text}'
-        assert 'unexpected payload shape' in res.text.lower()
-    finally:
-        app.dependency_overrides.pop(get_verified_user, None)
-
-
-def test_mcp_error_envelope_propagates_as_502(monkeypatch):
+def test_call_user_tool_error_envelope_propagates_as_502(monkeypatch):
     monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
     err_envelope = {
         'jsonrpc': '2.0',
@@ -308,13 +265,249 @@ def test_mcp_error_envelope_propagates_as_502(monkeypatch):
     with patcher:
         with pytest.raises(HTTPException) as exc:
             _run(
-                _call_list_memories(
+                _call_user_tool(
+                    tool_name='list_memories',
+                    arguments={},
                     user_email='ralph@example.org',
-                    scope=None,
-                    project_id=None,
-                    memory_type=None,
-                    limit=None,
                 )
             )
     assert exc.value.status_code == 502
     assert 'invalid' in exc.value.detail.lower()
+
+
+# --- /list endpoint (regression on prior cycle) ---------------------------
+
+
+def test_list_endpoint_passes_args_through(monkeypatch):
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_LIST))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).get(
+                '/api/v1/rm-memory/list',
+                params={'scope': 'project', 'project_id': '42', 'type': 'feedback', 'limit': 10},
+            )
+        assert res.status_code == 200, res.text
+        args = post_mock.call_args.kwargs['json']['params']['arguments']
+        assert args == {'scope': 'project', 'project_id': '42', 'type': 'feedback', 'limit': 10}
+    finally:
+        undo()
+
+
+def test_list_endpoint_validation_error_is_502(monkeypatch):
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    bad_payload = {'entries': [{'name': 'x'}]}  # missing required type/scope/etc
+    patcher, _ = _patch_async_client(_sse_response(bad_payload))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).get('/api/v1/rm-memory/list')
+        assert res.status_code == 502, res.text
+        assert 'unexpected payload shape' in res.text.lower()
+    finally:
+        undo()
+
+
+# --- /{name} GET endpoint --------------------------------------------------
+
+
+def test_get_endpoint_returns_full_content(monkeypatch):
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_GET))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).get('/api/v1/rm-memory/identity')
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body['name'] == 'identity'
+        assert body['content'].startswith('Ralph is the sole admin')
+        # The MCP RPC name argument matches the path.
+        rpc = post_mock.call_args.kwargs['json']
+        assert rpc['params']['name'] == 'get_memory'
+        assert rpc['params']['arguments']['name'] == 'identity'
+    finally:
+        undo()
+
+
+def test_get_endpoint_passes_optional_disambiguators(monkeypatch):
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_GET))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).get(
+                '/api/v1/rm-memory/identity',
+                params={'type': 'user', 'project_id': '7'},
+            )
+        assert res.status_code == 200
+        args = post_mock.call_args.kwargs['json']['params']['arguments']
+        assert args == {'name': 'identity', 'type': 'user', 'project_id': '7'}
+    finally:
+        undo()
+
+
+# --- POST endpoint (save) --------------------------------------------------
+
+
+def test_save_endpoint_happy(monkeypatch):
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_SAVE))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).post(
+                '/api/v1/rm-memory',
+                json={
+                    'name': 'identity',
+                    'description': 'sole admin',
+                    'type': 'user',
+                    'content': 'Ralph is the sole admin.',
+                },
+            )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body['name'] == 'identity'
+        assert body['updated'] is True
+        rpc = post_mock.call_args.kwargs['json']
+        assert rpc['params']['name'] == 'save_memory'
+        # Optional fields (scope, project_id) NOT fabricated when absent.
+        assert 'scope' not in rpc['params']['arguments']
+        assert 'project_id' not in rpc['params']['arguments']
+    finally:
+        undo()
+
+
+def test_save_rejects_project_scope_without_project_id(monkeypatch):
+    """Pydantic invariant: scope='project' requires project_id. Surfaced
+    as a 422 client-error before we even contact the MCP."""
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_SAVE))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).post(
+                '/api/v1/rm-memory',
+                json={
+                    'name': 'x',
+                    'description': 'd',
+                    'type': 'project',
+                    'content': 'c',
+                    'scope': 'project',
+                    # project_id intentionally missing
+                },
+            )
+        assert res.status_code == 422, res.text
+        post_mock.assert_not_called()
+    finally:
+        undo()
+
+
+def test_save_rejects_project_id_without_project_scope(monkeypatch):
+    """Inverse invariant: project_id is forbidden unless scope='project'."""
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_SAVE))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).post(
+                '/api/v1/rm-memory',
+                json={
+                    'name': 'x',
+                    'description': 'd',
+                    'type': 'user',
+                    'content': 'c',
+                    'scope': 'user',
+                    'project_id': 'leaked',
+                },
+            )
+        assert res.status_code == 422, res.text
+        post_mock.assert_not_called()
+    finally:
+        undo()
+
+
+# --- DELETE endpoint (forget) ----------------------------------------------
+
+
+def test_forget_endpoint_returns_deleted_rows(monkeypatch):
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, post_mock = _patch_async_client(_sse_response(SAMPLE_FORGET))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).delete(
+                '/api/v1/rm-memory/identity',
+                params={'type': 'user', 'scope': 'user'},
+            )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body == {'deleted': True, 'rows': 1}
+        rpc = post_mock.call_args.kwargs['json']
+        assert rpc['params']['name'] == 'forget_memory'
+        args = rpc['params']['arguments']
+        assert args == {'name': 'identity', 'type': 'user', 'scope': 'user'}
+    finally:
+        undo()
+
+
+def test_forget_endpoint_zero_rows_still_200(monkeypatch):
+    """If the MCP returns deleted=false / rows=0 (no match), the BFF
+    surfaces 200 with the result so the panel can render 'no matching
+    entry to forget' rather than a confusing 404."""
+    monkeypatch.setenv('MEMORY_GATEWAY_TOKEN', 'gateway-secret')
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+
+    patcher, _ = _patch_async_client(_sse_response({'deleted': False, 'rows': 0}))
+    undo = _override_user()
+    try:
+        with patcher:
+            res = TestClient(app).delete('/api/v1/rm-memory/missing')
+        assert res.status_code == 200, res.text
+        assert res.json() == {'deleted': False, 'rows': 0}
+    finally:
+        undo()
+
+
+# --- regression: ListMemoriesOutput schema still parses sample fixture -----
+
+
+def test_list_memories_output_schema_validates():
+    typed = ListMemoriesOutput.model_validate(SAMPLE_LIST)
+    assert len(typed.entries) == 2
+    assert typed.entries[1].project_id == '7'
