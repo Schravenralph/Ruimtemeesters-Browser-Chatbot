@@ -15,12 +15,22 @@
 
 	const TOP_USERS = 10;
 
+	// Request-token to drop stale responses: if the admin clicks the window
+	// selector twice quickly, the first request's response could otherwise
+	// arrive after the second and overwrite the fresh stats with old data
+	// (Bugbot finding on PR #59).
+	let requestId = 0;
+
 	const refresh = async () => {
+		const myId = ++requestId;
 		loading = true;
 		errorMsg = null;
 		try {
-			stats = await getAdoptionStats(localStorage.token, sinceDays);
+			const result = await getAdoptionStats(localStorage.token, sinceDays);
+			if (myId !== requestId) return; // a newer refresh is in flight; drop
+			stats = result;
 		} catch (e: any) {
+			if (myId !== requestId) return;
 			// Always end with a non-empty string so the {:else if errorMsg}
 			// branch always renders — an empty string would be falsy and
 			// blank the panel (Bugbot finding on PR #59, belt-and-braces).
@@ -28,7 +38,7 @@
 			errorMsg = raw || 'request failed';
 			stats = null;
 		} finally {
-			loading = false;
+			if (myId === requestId) loading = false;
 		}
 	};
 
