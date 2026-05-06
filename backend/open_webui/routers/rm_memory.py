@@ -117,13 +117,24 @@ async def _call_list_memories(
             resp = await client.post(url, json=rpc_payload, headers=headers)
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
+        # Preserve the upstream body in the detail so a 401 from the MCP
+        # surfaces with its real message (e.g. "Unauthorized: invalid
+        # bearer") instead of the bare httpx repr (Bugbot finding on PR
+        # #60). Body length is capped to keep the chatbot response small.
+        upstream = ''
+        if e.response is not None:
+            try:
+                upstream = (e.response.text or '')[:500]
+            except Exception:  # noqa: BLE001 — defensive read
+                upstream = ''
         log.warning(
             'rm-memory MCP returned %s for list_memories',
             e.response.status_code if e.response else '?',
         )
+        suffix = f' — {upstream}' if upstream else ''
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f'rm-memory MCP returned an error: {e}',
+            detail=f'rm-memory MCP returned an error: {e}{suffix}',
         ) from e
     except httpx.HTTPError as e:
         log.warning('rm-memory MCP transport error for list_memories: %s', e)
