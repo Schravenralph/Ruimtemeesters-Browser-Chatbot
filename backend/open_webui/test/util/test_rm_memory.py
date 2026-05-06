@@ -289,7 +289,7 @@ def test_list_endpoint_passes_args_through(monkeypatch):
     try:
         with patcher:
             res = TestClient(app).get(
-                '/api/v1/rm-memory/list',
+                '/api/v1/rm-memory',
                 params={'scope': 'project', 'project_id': '42', 'type': 'feedback', 'limit': 10},
             )
         assert res.status_code == 200, res.text
@@ -310,7 +310,7 @@ def test_list_endpoint_validation_error_is_502(monkeypatch):
     undo = _override_user()
     try:
         with patcher:
-            res = TestClient(app).get('/api/v1/rm-memory/list')
+            res = TestClient(app).get('/api/v1/rm-memory')
         assert res.status_code == 502, res.text
         assert 'unexpected payload shape' in res.text.lower()
     finally:

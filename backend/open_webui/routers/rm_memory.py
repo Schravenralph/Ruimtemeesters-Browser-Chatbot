@@ -228,7 +228,7 @@ def _user_email(user: Any) -> str | None:
 # --- endpoints -------------------------------------------------------------
 
 
-@router.get('/list', response_model=ListMemoriesOutput)
+@router.get('', response_model=ListMemoriesOutput)
 async def list_memories_endpoint(
     scope: SCOPE | None = Query(default=None, description='Restrict to one scope.'),
     project_id: str | None = Query(
@@ -253,6 +253,9 @@ async def list_memories_endpoint(
 
     Returns the index view: name + description + metadata, no content.
     Use a follow-up `GET /{name}` call to retrieve content.
+
+    Mounted at the collection root (no `/list` segment) so `name == 'list'`
+    can't shadow this route — Bugbot finding on PR #61.
     """
     arguments: dict[str, Any] = {}
     if scope is not None:
