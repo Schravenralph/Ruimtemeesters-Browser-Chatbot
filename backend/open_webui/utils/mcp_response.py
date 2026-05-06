@@ -22,11 +22,16 @@ def parse_mcp_response(text: str) -> dict:
     """Parse an MCP HTTP response body and return the JSON-RPC envelope.
 
     Accepts either pure JSON or SSE-framed `event: message\\ndata: {...}`.
-    Multiple SSE events are tolerated: the last event whose data is
-    valid JSON wins. Non-JSON data events (notifications, keep-alives)
-    are skipped silently rather than aborting the parse — strict
-    `json.loads` inside the loop would lose a valid result that arrives
-    after a non-JSON event.
+    Non-JSON data events (notifications, keep-alives) are skipped.
+
+    SSE selection rule: prefer the FIRST envelope that carries `result`
+    or `error` (the spec-defined response shapes for our request).
+    Server-sent JSON-RPC notifications that arrive after the response
+    must NOT overwrite it — without this guard a late notification
+    would make a successful response look malformed (Bugbot finding on
+    PR #56). Fall back to the last otherwise-valid envelope when no
+    result/error event appears, so legitimate but unrecognised
+    responses still parse.
 
     Raises ValueError on empty bodies or SSE bodies with no parseable
     data event.
@@ -37,10 +42,11 @@ def parse_mcp_response(text: str) -> dict:
     if stripped.startswith('{'):
         return json.loads(stripped)
 
-    last_payload: dict | None = None
+    response_payload: dict | None = None  # first event with result/error
+    fallback_payload: dict | None = None  # last otherwise-valid dict
 
     def _try_consume(buf: list[str]) -> None:
-        nonlocal last_payload
+        nonlocal response_payload, fallback_payload
         joined = '\n'.join(buf).strip()
         if not joined:
             return
@@ -48,8 +54,12 @@ def parse_mcp_response(text: str) -> dict:
             parsed = json.loads(joined)
         except ValueError:
             return
-        if isinstance(parsed, dict):
-            last_payload = parsed
+        if not isinstance(parsed, dict):
+            return
+        if response_payload is None and ('result' in parsed or 'error' in parsed):
+            response_payload = parsed
+            return
+        fallback_payload = parsed
 
     data_buf: list[str] = []
     for line in text.splitlines():
@@ -60,9 +70,10 @@ def parse_mcp_response(text: str) -> dict:
             data_buf = []
     if data_buf:
         _try_consume(data_buf)
-    if last_payload is None:
+    chosen = response_payload if response_payload is not None else fallback_payload
+    if chosen is None:
         raise ValueError('SSE body had no JSON data event')
-    return last_payload
+    return chosen
 
 
 def extract_tool_result(envelope: dict) -> dict:

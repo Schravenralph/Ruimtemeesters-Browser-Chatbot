@@ -229,3 +229,60 @@ def test_mcp_error_envelope_propagates_as_502(monkeypatch):
             _run(_call_get_adoption_stats(since_days=None))
     assert exc.value.status_code == 502
     assert 'forbidden' in exc.value.detail.lower()
+
+
+def test_late_notification_does_not_clobber_result(monkeypatch):
+    """Bugbot finding on PR #56: a JSON-RPC notification arriving after
+    the response must NOT overwrite the response payload. The parser
+    prefers the envelope with `result`/`error` over later notifications."""
+    monkeypatch.setenv('MEMORY_ADMIN_TOKEN', 'sekret')
+    response_envelope = {
+        'jsonrpc': '2.0',
+        'id': 'rpc-id',
+        'result': {'content': [{'type': 'text', 'text': json.dumps(SAMPLE_OUTPUT)}]},
+    }
+    notification_envelope = {
+        'jsonrpc': '2.0',
+        'method': 'progress',
+        'params': {'phase': 'cleanup'},
+    }
+    body = (
+        f'event: message\ndata: {json.dumps(response_envelope)}\n\n'
+        f'event: message\ndata: {json.dumps(notification_envelope)}\n'
+    )
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.text = body
+
+    patcher, _ = _patch_async_client(resp)
+    with patcher:
+        payload = _run(_call_get_adoption_stats(since_days=None))
+    # The result envelope wins over the trailing notification.
+    assert payload['entries']['total'] == 12
+
+
+def test_validation_error_propagates_as_502(monkeypatch):
+    """Bugbot finding on PR #56: when the MCP returns a tool payload
+    that doesn't match GetAdoptionStatsOutput, the endpoint must surface
+    a 502 (gateway-level fault), not let the Pydantic ValidationError
+    leak as a 500."""
+    monkeypatch.setenv('MEMORY_ADMIN_TOKEN', 'sekret')
+
+    from fastapi.testclient import TestClient
+
+    from open_webui.main import app  # noqa: PLC0415
+    from open_webui.utils.auth import get_admin_user
+
+    bad_payload = {'measured_at': 'x', 'entries': {'total': 0}}
+    patcher, _ = _patch_async_client(_sse_response(bad_payload))
+
+    # Bypass the auth dep so this stays a unit-style test (no DB).
+    app.dependency_overrides[get_admin_user] = lambda: type('U', (), {'id': 'admin', 'email': 'a@x'})()
+    try:
+        with patcher:
+            client = TestClient(app)
+            res = client.get('/api/v1/admin/memory/stats')
+        assert res.status_code == 502, f'expected 502, got {res.status_code}: {res.text}'
+        assert 'unexpected payload shape' in res.text.lower()
+    finally:
+        app.dependency_overrides.pop(get_admin_user, None)

@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from open_webui.utils.auth import get_admin_user
 from open_webui.utils.mcp_response import extract_tool_result, parse_mcp_response
@@ -174,4 +174,14 @@ async def get_adoption_stats_endpoint(
 ) -> AdoptionStats:
     """Return cross-user memory adoption stats. Admin only."""
     payload = await _call_get_adoption_stats(since_days=since_days)
-    return AdoptionStats.model_validate(payload)
+    # Schema-validate inside the same 502 boundary as the MCP transport
+    # — a malformed payload from the MCP is a gateway-level fault, not
+    # a bug in the chatbot, so it must not surface as 500.
+    try:
+        return AdoptionStats.model_validate(payload)
+    except ValidationError as e:
+        log.warning('memory MCP returned a payload that failed schema validation: %s', e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'Memory MCP returned an unexpected payload shape: {e}',
+        ) from e
