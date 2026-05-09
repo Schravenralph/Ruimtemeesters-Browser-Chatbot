@@ -188,7 +188,17 @@ services:
       chatbot-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:4000/health/liveliness || exit 1"]
+      # The litellm:main-stable image ships without curl/wget — use the
+      # vendored python instead. urlopen returns a non-200 → urllib raises
+      # → check fails. urllib.request.urlopen.status is the cleanest
+      # one-liner that doesn't pull in any extra deps.
+      test:
+        [
+          'CMD',
+          'python3',
+          '-c',
+          'import urllib.request, sys; sys.exit(0 if urllib.request.urlopen("http://localhost:4000/health/liveliness", timeout=3).status == 200 else 1)'
+        ]
       interval: 10s
       timeout: 5s
       retries: 6
