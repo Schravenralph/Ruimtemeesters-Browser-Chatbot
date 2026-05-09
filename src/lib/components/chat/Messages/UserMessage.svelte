@@ -137,7 +137,7 @@
 			<ProfileImage
 				src={user?.id
 					? `${WEBUI_API_BASE_URL}/users/${user.id}/profile/image`
-					: `${WEBUI_BASE_URL}/static/user.png`}
+					: `${WEBUI_BASE_URL}/user.png`}
 				className={'size-8 user-message-profile-image'}
 			/>
 		</div>
