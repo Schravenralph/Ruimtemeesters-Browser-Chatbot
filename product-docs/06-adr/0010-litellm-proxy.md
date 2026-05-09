@@ -57,12 +57,43 @@ If anything goes wrong in step 2, revert — step 1's LiteLLM keeps running but 
 
 ## Consequences
 
-- One more container in the Docker Compose stack (`rm-litellm`)
-- LiteLLM shares the existing `chatbot-db` postgres instance — its tables (prefixed `LiteLLM_*`) coexist with OpenWebUI's. Backups and migrations now think about both sets, but for a single managed DB this is operationally trivial.
+- Two more containers in the Docker Compose stack: `rm-litellm` (the proxy) and `rm-litellm-db-init` (one-shot, exits after `CREATE DATABASE litellm`)
+- LiteLLM uses a **dedicated `litellm` logical database** within the shared `chatbot-db` postgres instance — its `LiteLLM_*` tables live there and never touch OpenWebUI's database. See "Postmortem" below for why this isolation is non-negotiable.
 - API keys move from OpenWebUI config to LiteLLM config after step 2 of the build order
 - OpenWebUI sees LiteLLM as a single OpenAI-compatible endpoint — all provider-specific config lives in LiteLLM
 - Adds a network hop (~1ms latency) between OpenWebUI and providers — negligible vs. LLM inference time
 - LiteLLM is on `rm-internal` only; no host port, no public surface — same security posture as the postgres DB
+
+## Postmortem — 2026-05-09 OWUI table wipe
+
+A first attempt at build-order step 1 (commit `534e78c` on this PR) pointed LiteLLM's `DATABASE_URL` at the **same** database OpenWebUI uses (`rmchatbot`). On first boot, LiteLLM's prisma migration step generated a "migration diff" between the live schema and its `schema.prisma` and applied it — which **dropped every OpenWebUI table** as "extra". The chatbot at `chatbot.datameesters.nl` began returning HTTP 500 on every request because `relation "user" does not exist`.
+
+Confirmed in LiteLLM's own startup logs:
+
+```
+INFO - Generating migration diff between DB and schema.prisma...
+INFO - Migration diff created at /tmp/litellm_migration_diff_*/migration.sql
+INFO - prisma db execute stdout: Script executed successfully.
+INFO - ✅ Migration diff applied successfully
+```
+
+The diff was the destructive op.
+
+**Recovery.** `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` followed by `docker restart rm-chatbot`, which let alembic recreate the OWUI schema fresh. No data was lost in practice — the chatbot had no important data on prod yet — but it would have been if there had been.
+
+**Root cause.** LiteLLM is **prisma-managed**. Prisma treats its `schema.prisma` as the source of truth for the database it points at. Sharing such a database with another app is incompatible with the prisma migration model.
+
+**Fix (this PR).** LiteLLM gets a **dedicated `litellm` logical database** within the shared chatbot-db postgres instance:
+
+- `litellm/config.yaml`'s `database_url` and the compose `DATABASE_URL` env var both end in `/litellm` (not `/${POSTGRES_DB}`).
+- A new compose service `litellm-db-init` runs `CREATE DATABASE litellm OWNER ${POSTGRES_USER}` idempotently before LiteLLM starts. LiteLLM's `depends_on` requires `litellm-db-init` to exit 0 first.
+- Comments in both files call this out explicitly so a future operator does not accidentally repoint the URL at the OWUI database.
+
+**Lessons captured.**
+
+- Never share a prisma-managed (or any ORM-managed-as-source-of-truth) database with another application. Logical isolation costs a single `CREATE DATABASE`; the alternative is a full rebuild.
+- Back up the chatbot-db volume independently from the host pg_dumpall pipeline. The 3am pg_dumpall does not reach dockerized postgres instances. (Tracked separately as a follow-up backup-cron PR.)
+- `start_period` on healthchecks is mandatory for first-boot prisma migration sweeps (~5 minutes for 116 migrations).
 
 ## Related
 
