@@ -1,0 +1,21 @@
+# Daily backup of the chatbot-db postgres at 3:30am.
+# 30 minutes after the storagebox-backup so the two don't fight over postgres CPU.
+#
+# Two install paths — pick one:
+#
+# (a) System cron (preferred — runs even when ralph is logged out, requires sudo):
+#     sudo cp scripts/cron/rm-chatbot-db-backup /etc/cron.d/
+#     sudo chmod 644 /etc/cron.d/rm-chatbot-db-backup
+#
+# (b) User crontab (no sudo, runs as ralph — has docker access in this setup):
+#     (crontab -l 2>/dev/null; echo '30 3 * * * /home/ralph/Projects/Ruimtemeesters-Browser-Chatbot/scripts/backup-chatbot-db.sh') | crontab -
+#
+# Manual trigger (debugging):
+#   /home/ralph/Projects/Ruimtemeesters-Browser-Chatbot/scripts/backup-chatbot-db.sh
+#
+# Log location: ~/.local/state/rm-chatbot-db-backup.log (override with LOG_FILE)
+#
+# Below is the system-cron form. The user-crontab form lives in the (b) line.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 3 * * * ralph /home/ralph/Projects/Ruimtemeesters-Browser-Chatbot/scripts/backup-chatbot-db.sh
