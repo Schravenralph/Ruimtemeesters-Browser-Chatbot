@@ -19,7 +19,7 @@ services:
       - /dev/dri:/dev/dri
     group_add:
       - video
-      - "993"  # render group GID for /dev/dri/renderD128
+      - '993' # render group GID for /dev/dri/renderD128
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
       - OLLAMA_NUM_GPU=999
@@ -48,7 +48,7 @@ services:
       chatbot-db:
         condition: service_healthy
     ports:
-      - "127.0.0.1:${OPEN_WEBUI_PORT:-3333}:8080"
+      - '127.0.0.1:${OPEN_WEBUI_PORT:-3333}:8080'
     environment:
       # --- Core ---
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -161,10 +161,106 @@ services:
     volumes:
       - chatbot-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rmchatbot}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-rmchatbot}']
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - rm-internal
+
+  # One-shot init: ensure the `litellm` database exists in chatbot-db.
+  # LiteLLM uses prisma which generates "migration diffs" against the schema
+  # it sees in its DATABASE_URL — when pointed at a database shared with
+  # another app, those diffs DROP the foreign tables. Giving LiteLLM its own
+  # logical database isolates the prisma footprint to a database it owns.
+  # See ADR-0010 "Postmortem" section.
+  litellm-db-init:
+    image: postgres:16-alpine
+    container_name: rm-litellm-db-init
+    depends_on:
+      chatbot-db:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:-rmchatbot}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      # Two jobs in one shot:
+      # 1. Refuse to proceed if LITELLM_MASTER_KEY is empty. LiteLLM's
+      #    upstream master_key validation was removed in their PR #16453,
+      #    so an empty key would otherwise produce a working but
+      #    UNAUTHENTICATED proxy on rm-internal — every container on that
+      #    network could call it and exfiltrate provider API keys.
+      #    Failing the init container here gates the whole LiteLLM stack
+      #    behind a real key (LiteLLM `depends_on: condition: service_completed_successfully`).
+      # 2. Idempotently CREATE DATABASE litellm so prisma migrations stay
+      #    isolated from OWUI's database (see ADR-0010 Postmortem).
+      - >
+        if [ -z "$$LITELLM_MASTER_KEY" ]; then
+          echo "ERROR: LITELLM_MASTER_KEY is empty.";
+          echo "Generate one with: openssl rand -hex 32";
+          echo "Set it in .env (prefixed sk- so OpenWebUI accepts it).";
+          exit 1;
+        fi;
+        psql -h chatbot-db -U ${POSTGRES_USER:-rmchatbot} -d postgres -tc
+        "SELECT 1 FROM pg_database WHERE datname='litellm'" | grep -q 1 ||
+        psql -h chatbot-db -U ${POSTGRES_USER:-rmchatbot} -d postgres -c
+        "CREATE DATABASE litellm OWNER ${POSTGRES_USER:-rmchatbot}"
+    restart: 'no'
+    networks:
+      - rm-internal
+
+  # LiteLLM proxy (ADR-0010). Single OpenAI-compatible endpoint between
+  # OpenWebUI and the actual providers. Step 1 of the build order: stand-up
+  # only — OpenWebUI still uses direct provider keys until the cutover PR.
+  # Internal-only (expose:, no ports:) per the never-publish-database rule.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: rm-litellm
+    command: ['--config', '/app/config.yaml', '--port', '4000', '--num_workers', '2']
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    environment:
+      # `:-` (not `:?`) — fail-soft on missing key so a missing
+      # LITELLM_MASTER_KEY only breaks the litellm service, not the whole
+      # compose stack. LiteLLM itself refuses to start without master_key,
+      # so the failure mode is a loud crashloop on rm-litellm while
+      # rm-chatbot, rm-ollama, and rm-chatbot-db keep running.
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
+      # IMPORTANT: this MUST point at the dedicated `litellm` database, never
+      # at the OWUI database (rmchatbot). LiteLLM's prisma migrations will
+      # drop any non-LiteLLM tables it finds. See ADR-0010 "Postmortem".
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-rmchatbot}:${POSTGRES_PASSWORD:-rmchatbot}@chatbot-db:5432/litellm
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    expose:
+      - '4000'
+    depends_on:
+      chatbot-db:
+        condition: service_healthy
+      litellm-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # The litellm:main-stable image ships without curl/wget — use the
+      # vendored python instead. urlopen returns a non-200 → urllib raises
+      # → check fails. urllib.request.urlopen.status is the cleanest
+      # one-liner that doesn't pull in any extra deps.
+      test:
+        [
+          'CMD',
+          'python3',
+          '-c',
+          'import urllib.request, sys; sys.exit(0 if urllib.request.urlopen("http://localhost:4000/health/liveliness", timeout=3).status == 200 else 1)'
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      # First boot runs ~116 prisma migrations against the shared
+      # chatbot-db; takes 4–5 minutes. Subsequent boots are fast.
+      start_period: 6m
     restart: unless-stopped
     networks:
       - rm-internal
