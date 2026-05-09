@@ -19,15 +19,15 @@
 
 			if (isDarkMode) {
 				const darkImage = new Image();
-				darkImage.src = `${WEBUI_BASE_URL}/static/favicon-dark.png`;
+				darkImage.src = `${WEBUI_BASE_URL}/brand-assets/icon-white.png`;
 
 				darkImage.onload = () => {
-					logo.src = `${WEBUI_BASE_URL}/static/favicon-dark.png`;
-					logo.style.filter = ''; // Ensure no inversion is applied if splash-dark.png exists
+					logo.src = `${WEBUI_BASE_URL}/brand-assets/icon-white.png`;
+					logo.style.filter = '';
 				};
 
 				darkImage.onerror = () => {
-					logo.style.filter = 'invert(1)'; // Invert image if splash-dark.png is missing
+					logo.style.filter = 'invert(1)';
 				};
 			}
 		}
@@ -46,9 +46,9 @@
 					<img
 						id="logo"
 						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/favicon.png"
+						src="{WEBUI_BASE_URL}/brand-assets/icon-blue.png"
 						class=" w-6 rounded-full"
-						alt="logo"
+						alt="Ruimtemeesters AI logo"
 					/>
 				</div>
 			</div>
