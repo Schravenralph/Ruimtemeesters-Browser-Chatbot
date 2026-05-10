@@ -34,14 +34,14 @@
 #   APP_CONTAINER=rm-chatbot
 #   DB_CONTAINER=rm-chatbot-db
 #   ADMIN_USER_ID=<uuid>             (defaults to first admin row in DB)
-#   DEFAULT_MODEL=gemini-2.5-flash-lite
+#   DEFAULT_MODEL=Meester             (codename, must match litellm/config.yaml)
 
 set -euo pipefail
 
 HOST="${HOST:-http://localhost:3333}"
 APP_CONTAINER="${APP_CONTAINER:-rm-chatbot}"
 DB_CONTAINER="${DB_CONTAINER:-rm-chatbot-db}"
-DEFAULT_MODEL="${DEFAULT_MODEL:-gemini-2.5-flash-lite}"
+DEFAULT_MODEL="${DEFAULT_MODEL:-Meester}"
 
 # Resolve admin user id from DB if not provided.
 ADMIN_USER_ID="${ADMIN_USER_ID:-}"
@@ -94,15 +94,13 @@ configs = {
     '0': {
         'enable': True,
         'connection_type': 'external',
-        'tags': [{'name': 'LiteLLM'}],
-        'model_ids': [
-            'claude-opus-4-7',
-            'claude-sonnet-4-6',
-            'gpt-4.1',
-            'gemini-2.5-pro',
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-lite',
-        ],
+        'tags': [{'name': 'Ruimtemeesters AI'}],
+        # Codenamed model surface — admin-curated, no per-user picker beyond
+        # these two. Names must match `model_name` keys in litellm/config.yaml.
+        # `Schets` (sketch — fast first-pass) is mapped to gemini-2.5-flash-lite;
+        # `Meester` (echoes Ruimtemeester — deliberate work) is mapped to
+        # claude-sonnet-4-6.
+        'model_ids': ['Schets', 'Meester'],
     },
 }
 
@@ -115,7 +113,13 @@ print(json.dumps({
 PY
 )
 
-RESP=$(curl -sS -X POST "$HOST/openai/config/update" \
+# `--fail-with-body` (curl >= 7.76) makes curl exit non-zero on HTTP 4xx/5xx
+# while still printing the response body to stdout — combined with `set -e`
+# at the top, this aborts the script before any subsequent step (read,
+# mutate, re-import) can act on a broken response. Without this, a 401 from
+# an expired token would parse as valid JSON and the next /configs/import
+# call would full-overwrite the saved config with garbage.
+RESP=$(curl -sS --fail-with-body -X POST "$HOST/openai/config/update" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "$BODY")
@@ -130,8 +134,8 @@ models = cfgs.get('0', {}).get('model_ids', [])
 if urls != ['http://litellm:4000/v1']:
     print(f'ERROR: expected single litellm URL, got {urls}', file=sys.stderr)
     sys.exit(2)
-if len(models) != 6:
-    print(f'ERROR: expected 6 LiteLLM models, got {len(models)}', file=sys.stderr)
+if len(models) != 2:
+    print(f'ERROR: expected 2 codenamed models, got {len(models)}', file=sys.stderr)
     sys.exit(2)
 
 print('seeded litellm connection: ' + ', '.join(models))
@@ -141,17 +145,30 @@ print('seeded litellm connection: ' + ', '.join(models))
 # /api/v1/configs/import does a full save_config(form_data.config) overwrite,
 # so we read-modify-write the whole blob to avoid clobbering everything else
 # (banners, branding, MCP tool servers — all in this same JSON document).
-EXPORT=$(curl -sS "$HOST/api/v1/configs/export" -H "Authorization: Bearer $TOKEN")
+#
+# `--fail-with-body` is critical here: a 401/403 on /configs/export would
+# otherwise parse as valid JSON `{"detail": "..."}`, get `ui.default_models`
+# merged into it, and then /configs/import would replace the real config
+# with that two-key blob. Bugbot caught this on f0d07a8.
+EXPORT=$(curl -sS --fail-with-body "$HOST/api/v1/configs/export" \
+  -H "Authorization: Bearer $TOKEN")
 
 MERGED=$(EXPORT="$EXPORT" DEFAULT_MODEL="$DEFAULT_MODEL" python3 - <<'PY'
-import json, os
+import json, os, sys
 cfg = json.loads(os.environ['EXPORT'])
+# Defense in depth: even after --fail-with-body, refuse to mutate a response
+# that doesn't look like an OWUI config. /configs/export should always
+# return a dict with `openai` (set up earlier in this script) and `ui`
+# (default_models lives here). If neither is present, something's wrong.
+if not isinstance(cfg, dict) or ('openai' not in cfg and 'ui' not in cfg):
+    print(f'ERROR: /configs/export returned an unexpected shape (top-level keys: {list(cfg)[:10] if isinstance(cfg, dict) else type(cfg).__name__}); refusing to import.', file=sys.stderr)
+    sys.exit(2)
 cfg.setdefault('ui', {})['default_models'] = os.environ['DEFAULT_MODEL']
 print(json.dumps({'config': cfg}))
 PY
 )
 
-IMPORT_RESP=$(curl -sS -X POST "$HOST/api/v1/configs/import" \
+IMPORT_RESP=$(curl -sS --fail-with-body -X POST "$HOST/api/v1/configs/import" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "$MERGED")
