@@ -164,6 +164,13 @@ if not isinstance(cfg, dict) or ('openai' not in cfg and 'ui' not in cfg):
     print(f'ERROR: /configs/export returned an unexpected shape (top-level keys: {list(cfg)[:10] if isinstance(cfg, dict) else type(cfg).__name__}); refusing to import.', file=sys.stderr)
     sys.exit(2)
 cfg.setdefault('ui', {})['default_models'] = os.environ['DEFAULT_MODEL']
+# Lock the model surface to the codenamed LiteLLM connection only.
+# Without these, an existing DB has `ollama.enable=true` (auto-discovers
+# any local Ollama models like qwen) and `evaluation.arena.enable=true`
+# (admin A/B-comparison models), both of which would surface in the user
+# picker alongside Schets/Meester.
+cfg.setdefault('ollama', {})['enable'] = False
+cfg.setdefault('evaluation', {}).setdefault('arena', {})['enable'] = False
 print(json.dumps({'config': cfg}))
 PY
 )
@@ -178,8 +185,17 @@ import json, os, sys
 r = json.load(sys.stdin)
 got = r.get('ui', {}).get('default_models')
 want = os.environ['DEFAULT_MODEL']
+ollama_enabled = r.get('ollama', {}).get('enable')
+arena_enabled = r.get('evaluation', {}).get('arena', {}).get('enable')
+ok = True
 if got != want:
-    print(f'ERROR: default_models is {got!r}, expected {want!r}', file=sys.stderr)
+    print(f'ERROR: default_models is {got!r}, expected {want!r}', file=sys.stderr); ok = False
+if ollama_enabled is not False:
+    print(f'ERROR: ollama.enable is {ollama_enabled!r}, expected False', file=sys.stderr); ok = False
+if arena_enabled is not False:
+    print(f'ERROR: evaluation.arena.enable is {arena_enabled!r}, expected False', file=sys.stderr); ok = False
+if not ok:
     sys.exit(2)
 print(f'reset default_models = {got}')
+print('disabled ollama.enable, evaluation.arena.enable')
 "

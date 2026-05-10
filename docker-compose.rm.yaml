@@ -59,6 +59,16 @@ services:
     environment:
       # --- Core ---
       - OLLAMA_BASE_URL=http://ollama:11434
+      # End users see only the codenamed LiteLLM surface (Schets, Meester).
+      # Hide every other model source from the dropdown:
+      #   - Ollama: any locally pulled model (qwen, llama, etc.) would
+      #     otherwise auto-discover into the picker.
+      #   - Evaluation arena models: admin-created A/B comparison models.
+      # PersistentConfig means env is read on first boot only — for the
+      # cutover deploy the DB needs to be flipped via /api/v1/configs/import
+      # (see scripts/seed-litellm-connection.sh which now also resets these).
+      - ENABLE_OLLAMA_API=${ENABLE_OLLAMA_API:-False}
+      - ENABLE_EVALUATION_ARENA_MODELS=${ENABLE_EVALUATION_ARENA_MODELS:-False}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-rmchatbot}:${POSTGRES_PASSWORD:-rmchatbot}@chatbot-db:5432/${POSTGRES_DB:-rmchatbot}
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
       # --- Branding ---
