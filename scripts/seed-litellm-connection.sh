@@ -34,14 +34,14 @@
 #   APP_CONTAINER=rm-chatbot
 #   DB_CONTAINER=rm-chatbot-db
 #   ADMIN_USER_ID=<uuid>             (defaults to first admin row in DB)
-#   DEFAULT_MODEL=Meester             (codename, must match litellm/config.yaml)
+#   DEFAULT_MODEL=RO-Bot              (must match a model_name in litellm/config.yaml)
 
 set -euo pipefail
 
 HOST="${HOST:-http://localhost:3333}"
 APP_CONTAINER="${APP_CONTAINER:-rm-chatbot}"
 DB_CONTAINER="${DB_CONTAINER:-rm-chatbot-db}"
-DEFAULT_MODEL="${DEFAULT_MODEL:-Meester}"
+DEFAULT_MODEL="${DEFAULT_MODEL:-RO-Bot}"
 
 # Resolve admin user id from DB if not provided.
 ADMIN_USER_ID="${ADMIN_USER_ID:-}"
@@ -95,12 +95,11 @@ configs = {
         'enable': True,
         'connection_type': 'external',
         'tags': [{'name': 'Ruimtemeesters AI'}],
-        # Codenamed model surface — admin-curated, no per-user picker beyond
-        # these two. Names must match `model_name` keys in litellm/config.yaml.
-        # `Schets` (sketch — fast first-pass) is mapped to gemini-2.5-flash-lite;
-        # `Meester` (echoes Ruimtemeester — deliberate work) is mapped to
-        # claude-sonnet-4-6.
-        'model_ids': ['Schets', 'Meester'],
+        # Two RM personas. IDs must match `model_name` keys in
+        # litellm/config.yaml (LiteLLM uses these as routing keys).
+        # The display name + system prompt come from the OWUI Model rows
+        # seeded later in this script.
+        'model_ids': ['RO-Bot', 'JURA'],
     },
 }
 
@@ -168,7 +167,7 @@ cfg.setdefault('ui', {})['default_models'] = os.environ['DEFAULT_MODEL']
 # Without these, an existing DB has `ollama.enable=true` (auto-discovers
 # any local Ollama models like qwen) and `evaluation.arena.enable=true`
 # (admin A/B-comparison models), both of which would surface in the user
-# picker alongside Schets/Meester.
+# picker alongside RO-Bot/JURA.
 cfg.setdefault('ollama', {})['enable'] = False
 cfg.setdefault('evaluation', {}).setdefault('arena', {})['enable'] = False
 print(json.dumps({'config': cfg}))
@@ -199,3 +198,69 @@ if not ok:
 print(f'reset default_models = {got}')
 print('disabled ollama.enable, evaluation.arena.enable')
 "
+
+# --- 3. Persona Model rows (system prompts) ---------------------------------
+# OWUI Model rows are the overlay that gives a base LiteLLM alias a display
+# name + system prompt + description. Without them, "RO-Bot" and "JURA" would
+# show in the picker but reach the model with no system prompt — Opus default
+# voice, no RM domain framing.
+#
+# Idempotent: /api/v1/models/create returns 401 if the id already exists, so
+# we delete-then-create on each run. The delete is best-effort (no failure if
+# the row didn't exist yet).
+seed_persona() {
+  local id="$1"
+  local display_name="$2"
+  local description="$3"
+  local system_prompt="$4"
+
+  # Best-effort delete first so re-runs apply prompt edits cleanly.
+  curl -sS -X POST "$HOST/api/v1/models/model/delete?id=$id" \
+    -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1 || true
+
+  local body
+  body=$(ID="$id" NAME="$display_name" DESC="$description" SYS="$system_prompt" python3 - <<'PY'
+import json, os
+print(json.dumps({
+    'id': os.environ['ID'],
+    'base_model_id': os.environ['ID'],   # routes to the LiteLLM alias of the same name
+    'name': os.environ['NAME'],
+    'meta': {
+        'description': os.environ['DESC'],
+        # Profile image fallback already serves the Ralph mascot for any
+        # model without a custom URL — no need to set one here.
+    },
+    'params': {
+        # OpenWebUI prepends `params.system` as a system message before
+        # the user's chat history when sending to the underlying model.
+        'system': os.environ['SYS'],
+    },
+    'is_active': True,
+}))
+PY
+)
+
+  curl -sS --fail-with-body -X POST "$HOST/api/v1/models/create" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$body" \
+    | python3 -c "
+import json, sys
+r = json.load(sys.stdin)
+if r is None or 'id' not in r:
+    print(f'ERROR: model create returned {r!r}', file=sys.stderr); sys.exit(2)
+print(f\"  seeded persona: {r.get('id')} -> {r.get('name')}\")
+"
+}
+
+echo "Seeding persona Model rows..."
+
+seed_persona "RO-Bot" "RO-Bot: Assistent voor RO-Adviseurs" \
+  "Sparringpartner voor ruimtelijke ordening — BOPA, omgevingsplannen, beleidsdocumenten en ruimtelijke vraagstukken." \
+  "Je bent RO-Bot, een AI-assistent voor RO-adviseurs (ruimtelijke ordening) bij Ruimtemeesters. Je helpt met BOPA-onderbouwingen, omgevingsplannen, beleidsdocumenten en ruimtelijke vraagstukken in Nederland onder de Omgevingswet. Antwoord beknopt en in het Nederlands. Gebruik vakjargon waar passend, en verwijs zo concreet mogelijk naar artikelen, beleidsbronnen of locaties. Wees expliciet over onzekerheid wanneer informatie ontbreekt of wanneer een ruimtelijke afweging om aanvullend onderzoek vraagt."
+
+seed_persona "JURA" "JURA: Juridisch Uitmuntende Robot-Assistent" \
+  "Juridische sparringpartner voor adviseurs — Omgevingswet, Awb, Wro en jurisprudentie." \
+  "Je bent JURA, een juridische AI-assistent voor adviseurs bij Ruimtemeesters. Je analyseert wet- en regelgeving (met name de Omgevingswet, Awb, en Wet ruimtelijke ordening), jurisprudentie en bestuurlijke besluiten. Antwoord precies en in het Nederlands. Citeer concrete artikelen of uitspraken (met vindplaats), maak onderscheid tussen vaste lijn en open normen, en wees expliciet over onzekerheid of bandbreedte in interpretatie. Geef geen advies dat een gemachtigd jurist zou moeten geven; markeer dat duidelijk als de vraag dat raakt."
+
+echo "Done."

@@ -83,10 +83,12 @@ services:
       - EXTERNAL_PWA_MANIFEST_URL=/brand-assets/rm-manifest.json
       # Non-dismissible trust banner on every session.
       - 'WEBUI_BANNERS=[{"id":"rm-trust","type":"info","title":"","content":"Besloten werkomgeving voor Ruimtemeesters · Data wordt niet gedeeld met LLM-providers","dismissible":false,"timestamp":1713398400}]'
-      # Default model — `Meester` (claude-sonnet-4-6 under the codename;
-      # see litellm/config.yaml). Quality-first default; users can flip to
-      # `Schets` (gemini-2.5-flash-lite) for quick lookups.
-      - DEFAULT_MODELS=${DEFAULT_MODELS:-Meester}
+      # Default model — `RO-Bot` (the RO-adviseur persona; see
+      # litellm/config.yaml + the OWUI Model row seeded by
+      # scripts/seed-litellm-connection.sh which carries the system prompt).
+      # Most chatbot use is RO planning work, so RO-Bot defaults; users
+      # can flip to `JURA` for juridische vraagstukken.
+      - DEFAULT_MODELS=${DEFAULT_MODELS:-RO-Bot}
       # Internal tool — disable community share (data-leak path).
       - ENABLE_COMMUNITY_SHARING=${ENABLE_COMMUNITY_SHARING:-false}
       # --- URL (needed behind reverse proxy for correct OAuth redirects) ---
