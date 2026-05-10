@@ -19,7 +19,7 @@ MANIFEST=$(curl -s "$HOST/manifest.json")
 # Pass ADMIN_USER_ID via `docker exec -e` so the value is read from
 # os.environ inside Python — nothing is interpolated into source, so an
 # ADMIN_USER_ID with an unusual char can't break out of a string literal.
-# Matches the pattern in seed-gemini-connection.sh.
+# Matches the pattern in seed-litellm-connection.sh.
 TOKEN=$(docker exec -i -e ADMIN_USER_ID="$ADMIN_USER_ID" "$APP_CONTAINER" python3 - <<'PY' 2>/dev/null | tail -1
 import os
 from datetime import timedelta
@@ -36,7 +36,7 @@ E_COUNT=$(docker exec "$DB_CONTAINER" psql -U rmchatbot -d rmchatbot -tAc \
 
 HAS_GREETING_UTIL="false"; [ -f src/lib/utils/greeting.ts ] && HAS_GREETING_UTIL="true"
 HAS_ABOUT_COPY="false"; grep -q "Gebouwd op Open WebUI" src/lib/components/chat/Settings/About.svelte 2>/dev/null && HAS_ABOUT_COPY="true"
-HAS_SEED_SCRIPT="false"; [ -x scripts/seed-gemini-connection.sh ] && HAS_SEED_SCRIPT="true"
+HAS_SEED_SCRIPT="false"; [ -x scripts/seed-litellm-connection.sh ] && HAS_SEED_SCRIPT="true"
 
 export A_CT A_CODE MANIFEST CONFIG BANNERS E_COUNT HAS_GREETING_UTIL HAS_ABOUT_COPY HAS_SEED_SCRIPT HOST
 

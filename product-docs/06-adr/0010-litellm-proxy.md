@@ -1,8 +1,8 @@
 # ADR-0010: LiteLLM proxy for provider routing and cost management
 
 **Date:** 2026-04-17
-**Last updated:** 2026-05-09
-**Status:** Accepted
+**Last updated:** 2026-05-10
+**Status:** Accepted (build order complete)
 
 ## Context
 
@@ -41,11 +41,13 @@ LiteLLM handles:
 
 Two-PR rollout to keep blast radius small:
 
-1. **Stand-up (this PR-pair commit).** Add the `litellm` service to `docker-compose.rm.yaml` with a `litellm/config.yaml` listing every provider/model. Spend tracking enabled against the existing `chatbot-db` postgres instance (LiteLLM auto-creates its own tables). LiteLLM listens on `rm-internal` only — never exposed to the host or public internet, per the database-publication security invariant. OpenWebUI still uses its direct provider keys at this point; LiteLLM runs in parallel for validation.
+1. **Stand-up (#68, merged 2026-05-09).** Added the `litellm` service to `docker-compose.rm.yaml` with a `litellm/config.yaml` listing every provider/model. Spend tracking enabled against the dedicated `litellm` logical database within the shared chatbot-db postgres instance. LiteLLM listens on `rm-internal` only — never exposed to the host or public internet, per the database-publication security invariant. OpenWebUI still used its direct provider keys at this point; LiteLLM ran in parallel for validation.
 
-2. **Cutover (follow-up PR).** Replace OpenWebUI's `OPENAI_API_KEYS` / `OPENAI_API_BASE_URLS` and `ANTHROPIC_API_KEY` with a single connection pointing at LiteLLM (`http://litellm:4000/v1`, `LITELLM_MASTER_KEY`). Verify chat works against each provider through the proxy. Drop the now-unused direct env vars.
+2. **Cutover (this PR, 2026-05-10).** Replaced OpenWebUI's `OPENAI_API_KEYS` / `OPENAI_API_BASE_URLS` / `ANTHROPIC_API_KEY` with a single connection pointing at LiteLLM (`http://litellm:4000/v1`, `LITELLM_MASTER_KEY`). Provider keys now live exclusively on the `litellm` service. `scripts/seed-gemini-connection.sh` was renamed to `scripts/seed-litellm-connection.sh` and rewritten to overwrite stale 3-provider DB Connection state from the pre-cutover seed (PersistentConfig means env-only changes don't propagate to existing volumes).
 
-If anything goes wrong in step 2, revert — step 1's LiteLLM keeps running but is unused, no chat impact.
+   Same PR also collapsed the model surface to **two codenamed models**: `Schets` (gemini-2.5-flash-lite — fast first-pass) and `Meester` (claude-sonnet-4-6 — deliberate work; echoes "Ruimtemeester"). The codename indirection in `litellm/config.yaml` means a future provider swap is a one-line config change — OpenWebUI keeps showing the same names to users, no DB Connection re-seed needed. `DEFAULT_MODELS=Meester`.
+
+Rollback: revert the cutover PR, redeploy. The litellm service stays running but unused; OpenWebUI goes back to direct provider env vars. The seed script reverts via git, restoring the 3-provider DB shape on next run.
 
 ## Rationale
 

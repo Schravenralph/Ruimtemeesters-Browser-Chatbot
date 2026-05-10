@@ -3,43 +3,24 @@
 # After cutover (ADR-0010 build order step 2), this is the single endpoint
 # OpenWebUI talks to. All provider keys live here, not in OpenWebUI.
 #
-# Curated model list intentionally omits preview / experimental snapshots
-# (e.g. gemini-3.1-*-preview, o1-preview) — see brand-roadmap.md for the
-# Phase 1 model-curation rationale.
+# Codenamed model surface — admin chooses the underlying provider model;
+# users only ever see the codename in the OpenWebUI dropdown. Two tiers:
+#   - `Schets` (sketch): fast first-pass, low cost
+#   - `Meester` (master, echoes "Ruimtemeester"): deliberate work, default
+# Swapping the underlying provider only requires editing `litellm_params.model`
+# below; the codename stays the same so no OpenWebUI DB migration is needed
+# (model_ids stored in the seeded Connection still point at the codename).
 
 model_list:
-  # --- Anthropic (native) ------------------------------------------------
-  - model_name: claude-opus-4-7
-    litellm_params:
-      model: anthropic/claude-opus-4-7
-      api_key: os.environ/ANTHROPIC_API_KEY
-
-  - model_name: claude-sonnet-4-6
-    litellm_params:
-      model: anthropic/claude-sonnet-4-6
-      api_key: os.environ/ANTHROPIC_API_KEY
-
-  # --- OpenAI ------------------------------------------------------------
-  - model_name: gpt-4.1
-    litellm_params:
-      model: openai/gpt-4.1
-      api_key: os.environ/OPENAI_API_KEY
-
-  # --- Gemini (Google AI Studio) -----------------------------------------
-  - model_name: gemini-2.5-pro
-    litellm_params:
-      model: gemini/gemini-2.5-pro
-      api_key: os.environ/GEMINI_API_KEY
-
-  - model_name: gemini-2.5-flash
-    litellm_params:
-      model: gemini/gemini-2.5-flash
-      api_key: os.environ/GEMINI_API_KEY
-
-  - model_name: gemini-2.5-flash-lite
+  - model_name: Schets
     litellm_params:
       model: gemini/gemini-2.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: Meester
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
 
 litellm_settings:
   # Tolerate OpenAI-shaped requests against non-OpenAI providers.

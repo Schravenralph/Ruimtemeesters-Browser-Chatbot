@@ -47,6 +47,13 @@ services:
         condition: service_started
       chatbot-db:
         condition: service_healthy
+      # Post-cutover (ADR-0010): chat path goes through LiteLLM. Gating on
+      # service_healthy avoids a window where the dropdown is empty / chat
+      # 503s while LiteLLM is still finishing its prisma migration sweep
+      # (~6 min on first boot). Subsequent boots are fast — see the litellm
+      # service healthcheck below for the start_period budget.
+      litellm:
+        condition: service_healthy
     ports:
       - '127.0.0.1:${OPEN_WEBUI_PORT:-3333}:8080'
     environment:
@@ -66,8 +73,10 @@ services:
       - EXTERNAL_PWA_MANIFEST_URL=/brand-assets/rm-manifest.json
       # Non-dismissible trust banner on every session.
       - 'WEBUI_BANNERS=[{"id":"rm-trust","type":"info","title":"","content":"Besloten werkomgeving voor Ruimtemeesters · Data wordt niet gedeeld met LLM-providers","dismissible":false,"timestamp":1713398400}]'
-      # Default model — Gemini 2.5 Flash Lite (fast, cheap, verified).
-      - DEFAULT_MODELS=${DEFAULT_MODELS:-gemini.gemini-2.5-flash-lite}
+      # Default model — `Meester` (claude-sonnet-4-6 under the codename;
+      # see litellm/config.yaml). Quality-first default; users can flip to
+      # `Schets` (gemini-2.5-flash-lite) for quick lookups.
+      - DEFAULT_MODELS=${DEFAULT_MODELS:-Meester}
       # Internal tool — disable community share (data-leak path).
       - ENABLE_COMMUNITY_SHARING=${ENABLE_COMMUNITY_SHARING:-false}
       # --- URL (needed behind reverse proxy for correct OAuth redirects) ---
@@ -95,20 +104,23 @@ services:
       - CLERK_SECRET_KEY=${CLERK_SECRET_KEY:-}
       - CLERK_JWKS_URI=${CLERK_JWKS_URI:-https://clerk.datameesters.nl/.well-known/jwks.json}
       - CLERK_ISSUER=${CLERK_ISSUER:-https://clerk.datameesters.nl}
-      # --- LLM Providers ---
-      # Multi-endpoint OpenAI-compatible: OpenAI + Google Gemini (AI Studio) +
-      # OpenRouter (gateway to Claude Opus 4.7, Llama, DeepSeek, and many more).
-      # Order matches OPENAI_API_KEYS to OPENAI_API_BASE_URLS by position.
-      # Per-endpoint curation (prefix_id, model_ids, tags) is NOT env-readable in OpenWebUI;
-      # configure it under Admin Panel → Settings → Connections after first boot.
-      - OPENAI_API_BASE_URLS=https://api.openai.com/v1;https://generativelanguage.googleapis.com/v1beta/openai;https://openrouter.ai/api/v1
-      - OPENAI_API_KEYS=${OPENAI_API_KEY:-};${GEMINI_API_KEY:-};${OPENROUTER_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # --- LLM Providers (post-cutover, ADR-0010) ---
+      # Single OpenAI-compatible endpoint pointing at the LiteLLM proxy. All
+      # provider keys (OpenAI, Anthropic, Gemini, OpenRouter) live on the
+      # `litellm` service below — never on the chatbot. OpenWebUI authenticates
+      # against LiteLLM with LITELLM_MASTER_KEY.
+      #
+      # Model curation lives in litellm/config.yaml. Bare model_name strings
+      # (no prefix_id) — see scripts/seed-litellm-connection.sh for the
+      # admin-API call that overwrites stale DB Connection state during
+      # cutover (PersistentConfig means env is read on first boot only).
+      - OPENAI_API_BASE_URLS=http://litellm:4000/v1
+      - OPENAI_API_KEYS=${LITELLM_MASTER_KEY:-}
       # All chatbot users are Clerk-verified (trusted internal). Without this,
-      # non-admin users see zero models in the dropdown — env-based connections
-      # (Gemini/OpenRouter/OpenAI) have no `model` DB row, and the filter at
-      # utils/models.py:455 only shows unconfigured models to admins. Flip back
-      # to false once a per-model access_grants story is in place.
+      # non-admin users see zero models in the dropdown — LiteLLM-proxied
+      # models have no `model` DB row, and the filter at utils/models.py:455
+      # only shows unconfigured models to admins. Flip back to false once a
+      # per-model access_grants story is in place.
       - BYPASS_MODEL_ACCESS_CONTROL=${BYPASS_MODEL_ACCESS_CONTROL:-true}
       # --- Audit logging ---
       - AUDIT_LOG_LEVEL=${AUDIT_LOG_LEVEL:-REQUEST}
@@ -212,8 +224,8 @@ services:
       - rm-internal
 
   # LiteLLM proxy (ADR-0010). Single OpenAI-compatible endpoint between
-  # OpenWebUI and the actual providers. Step 1 of the build order: stand-up
-  # only — OpenWebUI still uses direct provider keys until the cutover PR.
+  # OpenWebUI and the actual providers. Cutover complete: rm-chatbot points
+  # at http://litellm:4000/v1 with LITELLM_MASTER_KEY as its only key.
   # Internal-only (expose:, no ports:) per the never-publish-database rule.
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
