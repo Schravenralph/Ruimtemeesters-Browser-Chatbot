@@ -1076,15 +1076,20 @@
 		// Initialize i18n even if we didn't get a backend config,
 		// so `/error` can show something that's not `undefined`.
 
-		initI18n(localStorage?.locale);
-		if (!localStorage.locale) {
+		// Prefer the server-configured DEFAULT_LOCALE (compose env) over the
+		// user's previously-cached locale. When the deployment chose a language
+		// for users, initI18n hard-overrides localStorage so returning visitors
+		// don't keep an old en-US that browser auto-detect or a stale picker
+		// put there. Without this, the override added in d12ddb62a never fires
+		// for returning users because initI18n receives the *user's* cached
+		// locale instead of the deployment's policy.
+		initI18n(backendConfig?.default_locale || undefined);
+		if (!localStorage.locale && !backendConfig?.default_locale) {
 			const languages = await getLanguages();
 			const browserLanguages = navigator.languages
 				? navigator.languages
 				: [navigator.language || navigator.userLanguage];
-			const lang = backendConfig?.default_locale
-				? backendConfig.default_locale
-				: bestMatchingLanguage(languages, browserLanguages, 'en-US');
+			const lang = bestMatchingLanguage(languages, browserLanguages, 'en-US');
 			changeLanguage(lang);
 			dayjs.locale(lang);
 		}
