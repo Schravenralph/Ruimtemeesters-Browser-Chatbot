@@ -31,14 +31,14 @@ themas:
     title: 'Wonen / Volkshuisvesting'
     github_repo: Ruimtemeesters-Scan-Volkshuisvesting
     local_folder: 01-Scan-Volkshuisvesting
-    persona: ro-adviseur
+    persona: ro-assistent
     cross_refs: [arbeidsmigranten-huisvesting]
   - slug: omgevingsplan
     number: 15
     title: 'Omgevingsplan'
     github_repo: Ruimtemeesters-Scan-Omgevingsplan
     local_folder: 15-Scan-Omgevingsplan
-    persona: juridisch-adviseur
+    persona: juridisch-assistent
     cross_refs: []
   # ... 16 more
 ```
