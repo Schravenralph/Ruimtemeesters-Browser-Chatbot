@@ -1,7 +1,7 @@
 {
-	"name": "Ruimtemeesters AI",
-	"short_name": "RM AI",
-	"description": "Ruimtemeesters AI — besloten werkomgeving voor beleidsonderzoek, ruimtelijke analyse en demografische prognoses.",
+	"name": "Ruimtemeesters AI Chat",
+	"short_name": "RM AI Chat",
+	"description": "Ruimtemeesters AI Chat — besloten werkomgeving voor beleidsonderzoek, ruimtelijke analyse en demografische prognoses.",
 	"start_url": "/",
 	"display": "standalone",
 	"background_color": "#F7F4EF",
