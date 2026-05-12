@@ -120,7 +120,7 @@ sessions where unrelated project context shouldn't leak.
 | Malformed MCP response                                   | Log warning; no injection.                         |
 | User has zero active sessions                            | No injection.                                      |
 | User's only active session is older than `max_age_hours` | No injection.                                      |
-| Different model selected (e.g. `rm-demografie-analist`)  | No injection — and no MCP call (gated before RPC). |
+| Different model selected (e.g. `Juridisch-Assistent`)    | No injection — and no MCP call (gated before RPC). |
 
 The filter wraps its inlet handler in a top-level try/except — any
 unexpected error is logged and the body is returned unchanged. **The chat
