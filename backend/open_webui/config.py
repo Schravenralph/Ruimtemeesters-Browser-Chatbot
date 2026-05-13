@@ -3026,13 +3026,13 @@ YOUTUBE_LOADER_PROXY_URL = PersistentConfig(
 ENABLE_WEB_SEARCH = PersistentConfig(
     'ENABLE_WEB_SEARCH',
     'rag.web.search.enable',
-    os.getenv('ENABLE_WEB_SEARCH', 'False').lower() == 'true',
+    os.getenv('ENABLE_WEB_SEARCH', 'True').lower() == 'true',
 )
 
 WEB_SEARCH_ENGINE = PersistentConfig(
     'WEB_SEARCH_ENGINE',
     'rag.web.search.engine',
-    os.getenv('WEB_SEARCH_ENGINE', ''),
+    os.getenv('WEB_SEARCH_ENGINE', 'duckduckgo'),
 )
 
 BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL = PersistentConfig(
