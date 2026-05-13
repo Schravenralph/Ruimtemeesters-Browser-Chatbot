@@ -1580,6 +1580,13 @@ BYPASS_ADMIN_ACCESS_CONTROL = (
     == 'true'
 )
 
+# When True, a TOOL_SERVER_CONNECTIONS entry with no `config.access_grants`
+# is treated as public-read (all authenticated users). Default False keeps
+# upstream "no grants = admin-only" semantics; the RM deployment opts in via
+# docker-compose.rm.yaml so env-wired MCPs work for non-admin users without
+# requiring DB writes.
+TOOL_SERVERS_DEFAULT_PUBLIC = os.environ.get('TOOL_SERVERS_DEFAULT_PUBLIC', 'False').lower() == 'true'
+
 ENABLE_ADMIN_CHAT_ACCESS = os.environ.get('ENABLE_ADMIN_CHAT_ACCESS', 'True').lower() == 'true'
 
 ENABLE_ADMIN_ANALYTICS = os.environ.get('ENABLE_ADMIN_ANALYTICS', 'True').lower() == 'true'

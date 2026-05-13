@@ -144,18 +144,58 @@ def has_access(
     return False
 
 
+def has_tool_server_access(
+    user: UserModel,
+    access_grants: list | None,
+    user_group_ids: set[str] | None = None,
+    db: Session | None = None,
+) -> bool:
+    """
+    Check if a user can access a tool-server-shaped resource given an
+    extracted ``access_grants`` list.
+
+    - Admin with BYPASS_ADMIN_ACCESS_CONTROL → always allowed
+    - Empty/missing grants + TOOL_SERVERS_DEFAULT_PUBLIC → allowed (env-wired
+      MCPs in compose ship without explicit grants; this opts the deployment
+      into "no grants = public" instead of upstream's "no grants = admin-only")
+    - Otherwise → delegates to ``has_access``
+    """
+    from open_webui.config import (
+        BYPASS_ADMIN_ACCESS_CONTROL,
+        TOOL_SERVERS_DEFAULT_PUBLIC,
+    )
+
+    if user.role == 'admin' and BYPASS_ADMIN_ACCESS_CONTROL:
+        return True
+
+    if not access_grants and TOOL_SERVERS_DEFAULT_PUBLIC:
+        return True
+
+    if user_group_ids is None:
+        user_group_ids = {group.id for group in Groups.get_groups_by_member_id(user.id, db=db)}
+
+    return has_access(user.id, 'read', access_grants or [], user_group_ids, db=db)
+
+
 def has_connection_access(
     user: UserModel,
     connection: dict,
     user_group_ids: set[str] | None = None,
 ) -> bool:
     """
-    Check if a user can access a server connection (tool server, terminal, etc.)
-    based on ``config.access_grants`` within the connection dict.
+    Check if a user can access a server connection (terminal server, generic
+    server connection) based on ``config.access_grants`` within the connection
+    dict.
 
     - Admin with BYPASS_ADMIN_ACCESS_CONTROL → always allowed
-    - Missing, None, or empty access_grants → private, admin-only
+    - Missing, None, or empty access_grants → private, admin-only (upstream
+      semantics; deliberately does NOT consult ``TOOL_SERVERS_DEFAULT_PUBLIC``
+      so terminal-server access control is not silently widened)
     - access_grants has entries → delegates to ``has_access``
+
+    Tool-server (MCP) call sites should use ``has_tool_server_connection_access``
+    instead — that path opts in to the public-default behaviour for env-wired
+    connections that ship without explicit grants.
     """
     from open_webui.config import BYPASS_ADMIN_ACCESS_CONTROL
 
@@ -167,6 +207,24 @@ def has_connection_access(
 
     access_grants = (connection.get('config') or {}).get('access_grants', [])
     return has_access(user.id, 'read', access_grants, user_group_ids)
+
+
+def has_tool_server_connection_access(
+    user: UserModel,
+    connection: dict,
+    user_group_ids: set[str] | None = None,
+) -> bool:
+    """
+    Tool-server-specific access check on a connection dict.
+
+    Same as ``has_connection_access`` but extracts ``access_grants`` and
+    delegates to ``has_tool_server_access`` so the ``TOOL_SERVERS_DEFAULT_PUBLIC``
+    bypass applies. Use this from tool-server (MCP) code paths; do NOT use
+    this for terminal servers — that scope should not be widened by the
+    tool-server flag.
+    """
+    access_grants = (connection.get('config') or {}).get('access_grants', [])
+    return has_tool_server_access(user, access_grants, user_group_ids)
 
 
 def migrate_access_control(data: dict, ac_key: str = 'access_control', grants_key: str = 'access_grants') -> None:

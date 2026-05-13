@@ -32,7 +32,7 @@ from open_webui.utils.tools import get_tool_specs
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import (
     has_permission,
-    has_access,
+    has_tool_server_access,
     filter_allowed_access_grants,
 )
 from open_webui.utils.tools import get_tool_servers
@@ -165,9 +165,8 @@ async def get_tools(
             for tool in tools
             if tool.user_id == user.id
             or (
-                has_access(
-                    user.id,
-                    'read',
+                has_tool_server_access(
+                    user,
                     server_access_grants.get(str(tool.id), []),
                     user_group_ids,
                     db=db,
