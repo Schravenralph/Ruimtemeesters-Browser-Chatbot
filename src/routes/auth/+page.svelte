@@ -252,7 +252,7 @@
 					</div>
 				{:else}
 					<div class="my-auto flex flex-col justify-center items-center w-full">
-						<div class="flex items-center gap-6 mb-2 sm:max-w-3xl w-full px-6 dark:text-gray-100">
+						<div class="flex items-center gap-6 mb-2 sm:max-w-7xl w-full px-6 dark:text-gray-100">
 							<img
 								id="logo"
 								crossorigin="anonymous"
@@ -260,7 +260,7 @@
 								class="size-24 lg:size-32 shrink-0 rounded-full"
 								alt="{$WEBUI_NAME} logo"
 							/>
-							<div class="brand-display text-5xl lg:text-7xl leading-[1.05] min-w-0 break-words">
+							<div class="brand-display text-6xl lg:text-[9rem] leading-[1.02] min-w-0 break-words">
 								{#if $config?.onboarding ?? false}
 									{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
 								{:else if mode === 'ldap'}
