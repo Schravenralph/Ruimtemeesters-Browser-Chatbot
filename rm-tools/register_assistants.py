@@ -91,7 +91,7 @@ ASSISTANTS = [
                 'server:mcp:rm-dashboarding',
                 'server:mcp:rm-memory',
             ],
-            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt', 'skills_context'],
+            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt', 'skills_context', 'citation_links'],
         },
         'params': {
             'system': """Je bent de RO Assistent voor adviseurs bij Ruimtemeesters. Je helpt met BOPA-onderbouwingen, omgevingsplannen, beleidsdocumenten en ruimtelijke vraagstukken in Nederland onder de Omgevingswet, en ondersteunt demografische analyses (TSA, Dashboarding) waar die het ruimtelijke advies versterken. Antwoord beknopt en in het Nederlands. Gebruik vakjargon waar passend, en verwijs zo concreet mogelijk naar artikelen, beleidsbronnen of locaties. Wees expliciet over onzekerheid wanneer informatie ontbreekt of wanneer een ruimtelijke afweging om aanvullend onderzoek vraagt.
@@ -144,7 +144,7 @@ Richtlijnen:
                 'server:mcp:rm-nieuws',
                 'server:mcp:rm-memory',
             ],
-            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt', 'skills_context'],
+            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt', 'skills_context', 'citation_links'],
         },
         'params': {
             'system': """Je bent de Juridisch Assistent voor adviseurs bij Ruimtemeesters. Je analyseert wet- en regelgeving (met name de Omgevingswet, Awb, en Wet ruimtelijke ordening), jurisprudentie en bestuurlijke besluiten. Antwoord precies en in het Nederlands. Citeer concrete artikelen of uitspraken (met vindplaats), maak onderscheid tussen vaste lijn en open normen, en wees expliciet over onzekerheid of bandbreedte in interpretatie. Geef geen advies dat een gemachtigd jurist zou moeten geven; markeer dat duidelijk als de vraag dat raakt.
@@ -196,7 +196,7 @@ Richtlijnen:
                 'server:mcp:rm-sales-predictor',
                 'server:mcp:rm-memory',
             ],
-            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt', 'skills_context'],
+            'filterIds': ['bopa_session_context', 'memory_recall_context', 'memory_save_prompt', 'skills_context', 'citation_links'],
         },
         'params': {
             'system': """Je bent de Commercieel Assistent voor adviseurs bij Ruimtemeesters. Je helpt bij commerciële vraagstukken: aanbestedingen en tendering (DAS, inhuur), opdrachten-pipeline, opportunities per gemeente, klant- en marktanalyse, en pricing/quoting. Antwoord beknopt en in het Nederlands. Verwijs naar concrete data of bronnen waar mogelijk (bijv. uitvragen, eerdere opdrachten, gemeentelijke contractstatus). Wees expliciet over onzekerheid in commerciële inschattingen, en markeer wanneer een commerciële beslissing menselijke afweging vraagt (bijv. go/no-go op een tender).
@@ -419,6 +419,20 @@ FILTERS = [
         # register_filter / _seed_filter_valves path below for the valve key.
         'needs_memory_token': False,
         'needs_skills_token': True,
+    },
+    {
+        'id': 'citation_links',
+        'name': 'Citation Links',
+        'description': (
+            "Outlet filter that turns bare ECLI references and Databank "
+            "`doc_id: …` mentions in the assistant's response into clickable "
+            'markdown links. Pure text transform — no outbound RPCs, no '
+            'caching. Idempotent against already-linked occurrences. '
+            'Implements roadmap Phase 3 must-do "Citation links in chatbot '
+            'responses (click to view source document)".'
+        ),
+        'source_path': 'citation_links.py',
+        'needs_memory_token': False,
     },
 ]
 
