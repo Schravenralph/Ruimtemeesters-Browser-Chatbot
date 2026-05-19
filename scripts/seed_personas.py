@@ -143,6 +143,15 @@ def seed_connection(base_url: str, token: str, manifest: Manifest, litellm_key: 
     export = _get(base_url, token, '/api/v1/configs/export')
     export.raise_for_status()
     cfg = export.json()
+
+    # Defense in depth: refuse to mutate a response that doesn't look like an
+    # OWUI config. /configs/import overwrites the full saved config, so a
+    # malformed 200 here would wipe banners, branding, and MCP settings.
+    # Bugbot caught this hazard on the legacy bash seeder (commit f0d07a8).
+    if not isinstance(cfg, dict) or ('openai' not in cfg and 'ui' not in cfg):
+        keys = list(cfg)[:10] if isinstance(cfg, dict) else type(cfg).__name__
+        raise RuntimeError(f'/configs/export returned unexpected shape (top-level: {keys}); refusing to import')
+
     cfg.setdefault('ui', {})['default_models'] = manifest.connection.default_model
     for dotted in manifest.connection.disable:
         head, *tail = dotted.split('.')
@@ -150,8 +159,23 @@ def seed_connection(base_url: str, token: str, manifest: Manifest, litellm_key: 
         for key in tail[:-1]:
             node = node.setdefault(key, {})
         node[tail[-1]] = False
+
     imp = _post(base_url, token, '/api/v1/configs/import', {'config': cfg})
     imp.raise_for_status()
+
+    # Post-import verify: server echoes the new config — confirm the values
+    # we care about actually landed.
+    applied = imp.json()
+    got_default = applied.get('ui', {}).get('default_models')
+    if got_default != manifest.connection.default_model:
+        raise RuntimeError(f'configs/import did not apply default_models (got {got_default!r})')
+    for dotted in manifest.connection.disable:
+        node: object = applied
+        for key in dotted.split('.'):
+            node = node.get(key) if isinstance(node, dict) else None
+        if node is not False:
+            raise RuntimeError(f'configs/import did not disable {dotted} (got {node!r})')
+
     print(f'  ~ default_models = {manifest.connection.default_model}')
     print(f'  ~ disabled: {", ".join(manifest.connection.disable) or "(none)"}')
 
@@ -192,8 +216,12 @@ def seed_filter(
     is_active_resp = _get(base_url, token, f'/api/v1/functions/id/{filter_def.id}')
     if is_active_resp.status_code == 200 and not is_active_resp.json().get('is_active'):
         tog = _post(base_url, token, f'/api/v1/functions/id/{filter_def.id}/toggle', {})
-        if tog.status_code == 200:
-            print('    -> activated')
+        if tog.status_code != 200:
+            # A filter installed-but-inactive will silently never run; the
+            # retired register_assistants.py treated this as hard failure too.
+            print(f'    -> activation FAILED: {tog.status_code}: {tog.text[:200]}')
+            return False
+        print('    -> activated')
 
     valves: dict = dict(filter_def.valves_extras)
     if filter_def.needs_memory_token and memory_token:

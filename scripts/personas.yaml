@@ -69,11 +69,18 @@ filters:
 
 # Persona Model rows we no longer want around. Cleared at the start of the
 # persona-seeding phase so they don't linger in the dropdown after a rename.
+# The `rm-*` ids were created by the retired rm-tools/register_assistants.py
+# (a parallel persona track with an unreachable Gemini base model). Any
+# environment that ran the old script still has those rows; this cleanup
+# removes them on next seed.
 legacy_persona_ids:
   - RO-Bot
   - JURA
   - Schets
   - Meester
+  - rm-ro-assistent
+  - rm-juridisch-assistent
+  - rm-commercieel-assistent
 
 # Per ADR-0011 — exactly three personas. Adding a fourth requires an ADR amendment.
 personas:
