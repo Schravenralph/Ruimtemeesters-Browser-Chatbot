@@ -79,7 +79,7 @@ services:
       #   - Evaluation arena models: admin-created A/B comparison models.
       # PersistentConfig means env is read on first boot only — for the
       # cutover deploy the DB needs to be flipped via /api/v1/configs/import
-      # (see scripts/seed-litellm-connection.sh which now also resets these).
+      # (see scripts/seed_personas.py which also resets these).
       - ENABLE_OLLAMA_API=${ENABLE_OLLAMA_API:-False}
       - ENABLE_EVALUATION_ARENA_MODELS=${ENABLE_EVALUATION_ARENA_MODELS:-False}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-rmchatbot}:${POSTGRES_PASSWORD:-rmchatbot}@chatbot-db:5432/${POSTGRES_DB:-rmchatbot}
@@ -98,7 +98,7 @@ services:
       - 'WEBUI_BANNERS=[{"id":"rm-trust","type":"info","title":"","content":"Besloten werkomgeving voor Ruimtemeesters · Data wordt niet gedeeld met LLM-providers","dismissible":false,"timestamp":1713398400}]'
       # Default model — `RO-Assistent` (the RO-adviseur persona; see
       # litellm/config.yaml + the OWUI Model row seeded by
-      # scripts/seed-litellm-connection.sh which carries the system prompt).
+      # scripts/seed_personas.py which carries the system prompt).
       # Most chatbot use is RO planning work, so RO-Assistent defaults;
       # users can flip to `Juridisch-Assistent` for juridische vraagstukken
       # or `Commercieel-Assistent` for tendering/sales/inhuur work.
@@ -137,9 +137,9 @@ services:
       # against LiteLLM with LITELLM_MASTER_KEY.
       #
       # Model curation lives in litellm/config.yaml. Bare model_name strings
-      # (no prefix_id) — see scripts/seed-litellm-connection.sh for the
-      # admin-API call that overwrites stale DB Connection state during
-      # cutover (PersistentConfig means env is read on first boot only).
+      # (no prefix_id) — see scripts/seed_personas.py for the admin-API
+      # call that overwrites stale DB Connection state during cutover
+      # (PersistentConfig means env is read on first boot only).
       - OPENAI_API_BASE_URLS=http://litellm:4000/v1
       - OPENAI_API_KEYS=${LITELLM_MASTER_KEY:-}
       # All chatbot users are Clerk-verified (trusted internal). Without this,
