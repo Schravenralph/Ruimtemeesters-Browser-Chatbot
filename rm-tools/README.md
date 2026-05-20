@@ -1,16 +1,26 @@
-# Ruimtemeesters AI — Assistant Registration
+# Ruimtemeesters AI — rm-tools
 
-Scripts for managing Ruimtemeesters assistants in OpenWebUI.
+This directory holds the OpenWebUI filter source code (inlet/outlet handlers)
+and unit tests for them. Tools themselves come from MCP servers (see the
+`Ruimtemeesters-MCP-Servers` repo).
 
-Tools are now provided by MCP servers (see `Ruimtemeesters-MCP-Servers` repo).
+## Layout
 
-## Register Assistants
+- `filters/` — Python source for OpenWebUI Function rows of type=filter.
+  These get uploaded to the OWUI DB by the persona seeder. Edit the `.py`
+  here, re-run the seeder to push.
+- `functions/` — older / experimental functions.
+- `tests/` — pytest coverage for each filter.
+
+## Persona + filter seeding
+
+Seeding is owned by `scripts/seed_personas.py` (per ADR-0018), driven by
+`scripts/personas.yaml`. To apply local changes:
 
 ```bash
-python rm-tools/register_assistants.py --url http://localhost:3333 --token <admin-token>
+python3 scripts/seed_personas.py --dry-run   # preview
+python3 scripts/seed_personas.py             # live
 ```
 
-The admin JWT can be obtained from the browser after logging in:
-
-- DevTools → Console → `localStorage.token`
-- Or from the `token` cookie
+See `product-docs/06-adr/0018-persona-seeding-yaml-manifest.md` for the
+design.

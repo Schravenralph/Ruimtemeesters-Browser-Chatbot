@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verify the OpenWebUI OpenAI-compatible connection list matches the
-# single-LiteLLM shape that seed-litellm-connection.sh writes (post-cutover,
-# ADR-0010).
+# single-LiteLLM shape that scripts/seed_personas.py writes (post-cutover,
+# ADR-0010; consolidated seeding per ADR-0018).
 #
 # Emits JSON to stdout (parallel to scripts/measure-brand.sh).
 # Exit 0 when every criterion passes, 1 otherwise.

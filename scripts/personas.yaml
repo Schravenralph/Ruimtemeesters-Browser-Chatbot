@@ -1,0 +1,277 @@
+# OpenWebUI persona seeding manifest.
+# Single source of truth — see ADR-0018.
+# Applied by `scripts/seed_personas.py`.
+#
+# Sections (in execution order):
+#   connection         — LiteLLM OpenAI-compat connection + default model + disabled providers
+#   filters            — OpenWebUI Function rows (type=filter), source files referenced by path
+#   legacy_persona_ids — Persona Model rows to delete on each run (retired ids)
+#   personas           — The three persona Model rows (ADR-0011 canon)
+#   prompts            — Slash-command prompt catalog
+
+connection:
+  base_urls:
+    - http://litellm:4000/v1
+  # Bare LiteLLM model_name values — must match `model_name` keys in litellm/config.yaml.
+  default_model: RO-Assistent
+  # Per-provider disables applied via /api/v1/configs/import.
+  disable:
+    - ollama.enable
+    - evaluation.arena.enable
+
+filters:
+  - id: bopa_session_context
+    name: BOPA Session Context
+    source_path: rm-tools/filters/bopa_session_context.py
+    needs_memory_token: true
+    description: >-
+      Inlet filter that injects the user's most-recent active BOPA session
+      into the system prompt. Read-only context priming via rm-memory MCP.
+      No-op when rm-memory is unreachable or the user has no active sessions.
+
+  - id: memory_recall_context
+    name: Memory Recall Context
+    source_path: rm-tools/filters/memory_recall_context.py
+    needs_memory_token: true
+    description: >-
+      Inlet filter that calls recall_memory with the user's latest message
+      and injects matching memory descriptions into the system prompt.
+      Read-only, fail-open. No-op for queries shorter than 4 chars or when
+      no memories match.
+
+  - id: memory_save_prompt
+    name: Memory Save Prompt
+    source_path: rm-tools/filters/memory_save_prompt.py
+    description: >-
+      Inlet filter that injects a one-shot instruction telling the assistant
+      to ask the user about saving when conversation context crosses a
+      configured threshold (default 100k / 250k / 500k / 1M tokens).
+      No outbound RPCs; per-(user, chat) in-memory state.
+
+  - id: skills_context
+    name: Skills Context
+    source_path: rm-tools/filters/skills_context.py
+    needs_skills_token: true
+    description: >-
+      Inlet filter that fetches the active persona's mandatory skills from
+      rm-skills (http://rm-skills:4101) at chat start and injects each body
+      as a <skill name='...'> block in the system prompt. Read-only,
+      fail-open. Cached per (persona, user_id) for 60s.
+
+  - id: citation_links
+    name: Citation Links
+    source_path: rm-tools/filters/citation_links.py
+    description: >-
+      Outlet filter that turns bare ECLI references and Databank `doc_id: …`
+      mentions in the assistant's response into clickable markdown links.
+      Pure text transform — no outbound RPCs, no caching. Idempotent against
+      already-linked occurrences.
+
+# Persona Model rows we no longer want around. Cleared at the start of the
+# persona-seeding phase so they don't linger in the dropdown after a rename.
+# The `rm-*` ids were created by the retired rm-tools/register_assistants.py
+# (a parallel persona track with an unreachable Gemini base model). Any
+# environment that ran the old script still has those rows; this cleanup
+# removes them on next seed.
+legacy_persona_ids:
+  - RO-Bot
+  - JURA
+  - Schets
+  - Meester
+  - rm-ro-assistent
+  - rm-juridisch-assistent
+  - rm-commercieel-assistent
+
+# Per ADR-0011 — exactly three personas. Adding a fourth requires an ADR amendment.
+personas:
+  - id: RO-Assistent
+    name: RO Assistent
+    description: Sparringpartner voor adviseurs bij Ruimtemeesters.
+    profile_image_url: /static/brand-assets/ralph-generic.jpg
+    capabilities:
+      web_search: true
+    default_feature_ids:
+      - web_search
+    tool_ids:
+      - server:mcp:rm-databank
+      - server:mcp:rm-geoportaal
+      - server:mcp:rm-tsa
+      - server:mcp:rm-dashboarding
+      - server:mcp:rm-aggregator
+      - server:mcp:rm-memory
+    filter_ids:
+      - skills_context
+    suggestion_prompts: []
+    system_prompt: |-
+      Je bent de RO Assistent voor adviseurs bij Ruimtemeesters. Nederlands.
+
+      Regels:
+      - Bij twijfel: tool gebruiken, terugvragen, of zeggen dat je het niet zeker weet. Niet gokken, niet aannemen, niet verzinnen.
+      - <map-context> resolveert alleen deictische verwijzingen ('hier', 'dit', 'deze locatie'). 'Waar zit Ruimtemeesters?' is GEEN deictische vraag — gebruik een tool of erken dat je het niet weet. Voeg ook geen losse claims over die selectie toe ('dit is het kantoor van X') tenzij een tool dat bevestigt.
+      - Geen rauwe coördinaten. Wikkel adressen als [[place:<volledig adres>]], features als [[feature:<layerKey>/<featureId>]], klikbare acties als [[action:pan_map:{"lon":<n>,"lat":<n>,"zoom":<n>}]] (alleen na een geocodeer-tool).
+
+  - id: Juridisch-Assistent
+    name: Juridisch Assistent
+    description: Juridische sparringpartner voor adviseurs — Omgevingswet, Awb, Wro en jurisprudentie.
+    profile_image_url: /static/brand-assets/ralph-generic.jpg
+    capabilities:
+      web_search: true
+    default_feature_ids:
+      - web_search
+    tool_ids:
+      - server:mcp:rm-databank
+      - server:mcp:rm-aggregator
+      - server:mcp:rm-memory
+    filter_ids:
+      - skills_context
+    suggestion_prompts: []
+    system_prompt: |-
+      Je bent de Juridisch Assistent voor adviseurs bij Ruimtemeesters. Nederlands.
+
+      Regels:
+      - Bij twijfel: bron citeren met vindplaats, of zeggen dat je het niet zeker weet. Niet gokken, niet aannemen, niet verzinnen.
+      - Onderscheid vaste lijn en open norm; benoem bandbreedte in interpretatie.
+      - Geen advies geven dat een gemachtigd jurist zou moeten geven — signaleer wanneer een vraag dat raakt.
+
+  - id: Commercieel-Assistent
+    name: Commercieel Assistent
+    description: Commerciële sparringpartner — tendering, aanbestedingen, opdrachten, sales pipeline en opportunities per gemeente.
+    profile_image_url: /static/brand-assets/ralph-generic.jpg
+    capabilities:
+      web_search: true
+    default_feature_ids:
+      - web_search
+    tool_ids:
+      - server:mcp:rm-opdrachten
+      - server:mcp:rm-riens
+      - server:mcp:rm-sales-predictor
+      - server:mcp:rm-dashboarding
+      - server:mcp:rm-aggregator
+      - server:mcp:rm-memory
+    filter_ids:
+      - skills_context
+    suggestion_prompts: []
+    system_prompt: |-
+      Je bent de Commercieel Assistent voor adviseurs bij Ruimtemeesters. Nederlands.
+
+      Regels:
+      - Bij twijfel: tool of bron raadplegen, of zeggen dat je het niet zeker weet. Niet gokken, niet aannemen, niet verzinnen.
+      - Geen go/no-go-beslissing op tenders — schets afwegingen en beveel menselijke beoordeling aan.
+
+prompts:
+  - command: beleidsscan
+    name: Beleidsscan
+    content: >-
+      Start een beleidsscan voor {{gemeente}}. Zoek alle relevante beleidsdocumenten
+      en geef een samenvatting van de belangrijkste beleidsthema's, maatregelen, en hun status.
+
+  - command: prognose
+    name: Bevolkingsprognose
+    content: >-
+      Geef de bevolkingsprognose voor gemeente {{gemeente}} (CBS code: {{geo_code}}).
+      Vergelijk de prognose met de huidige situatie en benoem de belangrijkste demografische trends.
+
+  - command: vergelijk
+    name: Vergelijk gemeenten
+    content: >-
+      Vergelijk {{gemeente_1}} en {{gemeente_2}} op het gebied van {{onderwerp}}.
+      Gebruik zowel beleidsdata als demografische gegevens.
+
+  - command: opdrachten
+    name: Opdrachten zoeken
+    content: >-
+      Doorzoek de opdrachten pipeline. Toon de huidige inbox, actieve pipeline items,
+      en aankomende deadlines. Geef een samenvatting van de status.
+
+  - command: rapport
+    name: Rapport genereren
+    content: >-
+      Genereer een rapport op basis van ons gesprek tot nu toe. Structureer het met een
+      samenvatting, bevindingen, en aanbevelingen. Gebruik een professionele toon.
+
+  - command: luchtkwaliteit
+    name: Luchtkwaliteit
+    content: >-
+      Geef de actuele luchtkwaliteitsgegevens voor {{locatie}}. Vergelijk met WHO-normen
+      en nationaal beleid. Benoem eventuele aandachtspunten.
+
+  - command: gemeente-status
+    name: Gemeente contractstatus
+    content: >-
+      Geef een overzicht van de contractstatus voor {{gemeente}}. Toon of het contract
+      actief, gearchiveerd of prospect is, en welke diensten er lopen.
+
+  - command: help
+    name: Help
+    content: >-
+      Toon een overzicht van alle beschikbare commando's, gegroepeerd per persona:
+      RO Assistent (beleid, demografie, ruimtelijke regels, BOPA, beleidsscan),
+      Juridisch Assistent (Omgevingswet, jurisprudentie), en
+      Commercieel Assistent (opdrachten, contracten, sales-prognoses).
+
+  - command: bopa-help
+    name: BOPA — Hoe werkt het?
+    content: |-
+      Leg in het Nederlands en in maximaal 250 woorden uit wat een BOPA-evaluatie is en hoe de adviseur er een doet via deze chat. Geef geen tool-calls; dit is puur een uitleg. Structuur:
+
+      1) Wat is een BOPA? — Buitenplanse Omgevingsplanactiviteit onder de Omgevingswet, een vergunning voor een initiatief dat afwijkt van het omgevingsplan.
+      2) De 6 fasen — Fase 1 Haalbaarheid (kan dit hier?), Fase 2 Strijdigheid (botst dit met het omgevingsplan?), Fase 3 Beleid (welke beleidsstukken zijn relevant?), Fase 4 Omgevingsaspecten (lucht, geluid, bodem, …), Fase 5 Onderbouwing (juridische motivering), Fase 6 Toetsing (eindafweging). Fasen 2/3 vereisen Fase 1; 4/5 vereisen 1+2+3; 6 vereist alle voorgaande.
+      3) Slash-commando's — vermeld dat de adviseur kan starten met `/bopa-haalbaarheid` (Fase 1), door kan met `/bopa-strijdigheid` (Fase 2), `/bopa-beleid` (Fase 3) en `/bopa-omgevingsaspecten` (Fase 4), en `/bopa-status` kan gebruiken voor een overzicht van lopende sessies. Fase 5–6 commando's zijn nog niet gepubliceerd (MCP-tools in de wacht).
+      4) Automatische context — meld dat als de adviseur al een lopende BOPA-sessie heeft, de RO Assistent die automatisch inlaadt aan het begin van elke chat (via de bopa_session_context inlet filter), zodat ze niet steeds `/bopa-status` hoeven te typen.
+      5) Privacy — een korte regel: per-user opt-out is mogelijk via instellingen → filters → BOPA Session Context.
+
+      Sluit af met de suggestie: "Wil je beginnen? Typ `/bopa-haalbaarheid` met het adres van je project."
+
+  - command: bopa-status
+    name: BOPA — Lopende sessies
+    content: >-
+      Geef een overzicht van mijn lopende BOPA-sessies.
+      Roep `list_bopa_sessions({})` aan op de rm-memory MCP server (laat het filter leeg om alle
+      sessies van mijn account te zien — als het filter verplicht is, vraag dan om gemeente_code of
+      project_id). Toon per sessie: project_id, adres/locatie, gemeente_code, welke fasen al zijn
+      afgerond (1 t/m 6), welke fase de volgende logische stap is (gebruik `dependencies_met`), en
+      eventuele blocked-by hints. Sortér op meest recent bijgewerkt. Geen verdere tool-calls — alleen
+      de status, geen evaluatie.
+
+  - command: bopa-haalbaarheid
+    name: 'BOPA — Fase 1: Haalbaarheid'
+    content: >-
+      Start een BOPA-haalbaarheidstoets voor het adres {{adres}} (project: {{project_id}}).
+      Volg de BOPA skill: geocode het adres, roep `list_bopa_sessions` aan om bestaande sessies te vinden,
+      maak indien nodig een nieuwe sessie via `create_bopa_session`, en voer de Fase 1 (Haalbaarheid) checks uit
+      (`activities_at_point`, bouwvlak/hoogte/BKL 8.0b). Schrijf het verdict terug via
+      `update_bopa_session({phase: 1, ...})` en vat de uitkomst samen voor de adviseur.
+
+  - command: bopa-strijdigheid
+    name: 'BOPA — Fase 2: Strijdigheid'
+    content: >-
+      Voer de BOPA Fase 2 (Strijdigheid) toets uit voor sessie {{session_id}}.
+      Vereist Fase 1 (Haalbaarheid) als prerequisite — als die nog niet is afgerond, leg dat uit en stel voor
+      `/bopa-haalbaarheid` eerst te draaien. Gebruik `ruimtelijke_toets` en `evaluate_rules` om de strijdigheden
+      met het omgevingsplan vast te stellen. Schrijf de bevindingen terug via
+      `update_bopa_session({phase: 2, ...})` en geef per strijdigheid een korte juridische motivering.
+
+  - command: bopa-beleid
+    name: 'BOPA — Fase 3: Beleid'
+    content: >-
+      Voer de BOPA Fase 3 (Beleid) toets uit voor sessie {{session_id}}.
+      Vereist Fase 1 (Haalbaarheid) als prerequisite — als die nog niet is afgerond, leg dat uit en stel voor
+      `/bopa-haalbaarheid` eerst te draaien. Gebruik `search_policy({section, gemeente_code})` op de Databank
+      om relevante beleidsstukken op te halen, en koppel ze aan de geometrie via het Geoportaal. Schrijf de
+      gevonden beleidskaders terug via `update_bopa_session({phase: 3, ...})`. Citeer voor elke bewering de
+      titel en bron van het beleidsstuk; geen ongedekte beweringen.
+
+  - command: bopa-omgevingsaspecten
+    name: 'BOPA — Fase 4: Omgevingsaspecten'
+    content: |-
+      Voer de BOPA Fase 4 (Omgevingsaspecten) toets uit voor sessie {{session_id}}. Vereist Fasen 1+2+3 als prerequisites — als één daarvan nog niet is afgerond, leg dat uit en stel voor `/bopa-haalbaarheid`, `/bopa-strijdigheid` of `/bopa-beleid` eerst te draaien (volg de volgorde uit `dependencies_met` op de sessie). De MCP weigert de schrijf-call op niet-vervulde prerequisites — lees die foutmelding goed en vertaal in het Nederlands wat de adviseur moet doen.
+
+      Stappen:
+      1) Haal de sessie op (`get_bopa_session({session_id})`) en lees `project_id`, `lon`, `lat`, `gemeente_code`.
+      2) Roep op het Geoportaal MCP `sample_bopa_constraints_at_point({lon, lat})` aan voor de ruimtelijke constraints die over het projectpunt liggen (bodem, geluid, water, ecologie, archeologie, etc.).
+      3) Roep op de Databank MCP `theme_profile_for_gemeente({gemeente_code})` aan voor het volledige themaprofiel van de gemeente (welke thema's gereguleerd zijn en hoe streng).
+      4) Bereken de doorsnede tussen de geraakte ruimtelijke constraints en de gereguleerde thema's. Voor elk gedeeld thema, roep `rules_by_gemeente_and_theme({gemeente_code, theme})` aan voor de concrete artikelen + verwijzingen.
+      5) Geef per thema een verdict: `present` (volledig geadresseerd in beleid + ruimtelijk relevant), `partial` (deels — leg uit wat ontbreekt), of `missing` (gereguleerd thema raakt het project maar geen beleidsdekking gevonden).
+      6) Schrijf de bevindingen terug via `update_bopa_session({phase: 4, data: {themes: [...], verdicts: {...}, citations: [...]}})`.
+
+      Citatie-eis: voor elke bewering verwijs je expliciet naar de bron — Geoportaal-laag (`layerKey` + `featureId`) voor ruimtelijke hits, en concreet artikel + naam van het beleidsstuk voor regulatoire verwijzingen. Geen ongedekte beweringen. Sluit af met een korte Nederlandse samenvatting voor de adviseur en stel `/bopa-status` voor om de bijgewerkte sessie te zien.
