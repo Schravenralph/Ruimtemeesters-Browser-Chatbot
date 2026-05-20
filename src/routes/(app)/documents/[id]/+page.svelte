@@ -35,7 +35,7 @@
 			'proposal-accepted',
 			'proposal-rejected',
 			'proposal-rejected-overlap',
-			'title-change',
+			'title-change'
 		];
 		const handlers = events.map((name) => {
 			const h = (e: Event) => {
@@ -47,12 +47,10 @@
 		});
 		// Stash on window for console-driven testing. Cleaned up via the
 		// return below so a SPA navigation away clears the reference.
-		(window as unknown as { __rmdgEmbedEl__?: HTMLElement }).__rmdgEmbedEl__ =
-			embedEl;
+		(window as unknown as { __rmdgEmbedEl__?: HTMLElement }).__rmdgEmbedEl__ = embedEl;
 		return () => {
 			for (const [name, h] of handlers) embedEl?.removeEventListener(name, h);
-			delete (window as unknown as { __rmdgEmbedEl__?: HTMLElement })
-				.__rmdgEmbedEl__;
+			delete (window as unknown as { __rmdgEmbedEl__?: HTMLElement }).__rmdgEmbedEl__;
 		};
 	});
 
@@ -92,12 +90,7 @@
 			</span>
 		</div>
 		<div class="docgen-view-embed">
-			<DocGenEmbed
-				documentId={documentId}
-				autoCreate
-				theme="light"
-				bind:embedEl
-			/>
+			<DocGenEmbed {documentId} autoCreate theme="light" bind:embedEl />
 		</div>
 		{#if toastMessage}
 			<div class="docgen-view-toast">{toastMessage}</div>

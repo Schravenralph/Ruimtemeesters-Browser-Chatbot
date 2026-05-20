@@ -31,9 +31,8 @@
 		<header class="docgen-list-header">
 			<h1>Documenten</h1>
 			<p>
-				Open een document of begin een nieuw concept. De inhoud wordt
-				automatisch opgeslagen in de Document-Generator backend van
-				Ruimtemeesters.
+				Open een document of begin een nieuw concept. De inhoud wordt automatisch opgeslagen in de
+				Document-Generator backend van Ruimtemeesters.
 			</p>
 		</header>
 		<div class="docgen-list-actions">

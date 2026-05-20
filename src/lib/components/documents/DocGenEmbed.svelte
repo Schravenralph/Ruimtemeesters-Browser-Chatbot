@@ -8,10 +8,7 @@
 	// All copy is Dutch, matching the rest of the embed/banner UX.
 
 	import { onMount, onDestroy } from 'svelte';
-	import {
-		getDocGenAuthToken,
-		onDocGenAuthChange,
-	} from '$lib/integrations/docGenAuth';
+	import { getDocGenAuthToken, onDocGenAuthChange } from '$lib/integrations/docGenAuth';
 
 	type Theme = 'light' | 'dark';
 
@@ -34,7 +31,7 @@
 		readonly = false,
 		apiBase = 'https://doc-gen.datameesters.nl/api',
 		bundleUrl = 'https://doc-gen.datameesters.nl/rm-doc-generator.js',
-		embedEl = $bindable(null),
+		embedEl = $bindable(null)
 	}: Props = $props();
 
 	let containerEl: HTMLDivElement | null = $state(null);
@@ -62,8 +59,7 @@
 			script.type = 'module';
 			script.async = true;
 			script.onload = () => resolve();
-			script.onerror = () =>
-				reject(new Error(`Kon ${url} niet laden`));
+			script.onerror = () => reject(new Error(`Kon ${url} niet laden`));
 			document.head.appendChild(script);
 		});
 		w[BUNDLE_PROMISE_KEY] = p;
@@ -126,11 +122,7 @@
 		{errorMessage ?? 'Document-Generator kon niet geladen worden.'}
 	</div>
 {:else}
-	<div
-		bind:this={containerEl}
-		class="docgen-embed-shell"
-		data-testid="docgen-embed-shell"
-	>
+	<div bind:this={containerEl} class="docgen-embed-shell" data-testid="docgen-embed-shell">
 		<!--
 			Custom element attributes match the DG TSD § Attributes. The
 			`auth-token` value rotates whenever Clerk hands us a fresh JWT
@@ -142,7 +134,7 @@
 		<rm-doc-generator
 			document-id={documentId}
 			auto-create={autoCreate ? '' : undefined}
-			theme={theme}
+			{theme}
 			readonly={readonly ? '' : undefined}
 			api-base={apiBase}
 			auth-token={token}

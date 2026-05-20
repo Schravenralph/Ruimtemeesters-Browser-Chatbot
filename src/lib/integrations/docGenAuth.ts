@@ -95,9 +95,7 @@ export async function getDocGenAuthToken(): Promise<string | null> {
  * Subscribe to session changes so the host can re-read the token when
  * Clerk rotates it. Returns an unsubscribe function.
  */
-export async function onDocGenAuthChange(
-	listener: () => void,
-): Promise<() => void> {
+export async function onDocGenAuthChange(listener: () => void): Promise<() => void> {
 	const clerk = await loadClerk();
 	if (!clerk) return () => {};
 	return clerk.addListener(() => listener());
