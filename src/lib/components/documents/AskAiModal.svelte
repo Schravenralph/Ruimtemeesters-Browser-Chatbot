@@ -34,13 +34,21 @@
 	let errorMessage = $state<string | null>(null);
 	let selectedModel = $state<string>('');
 
+	// Project-scoped localStorage key — avoids colliding with OWUI's
+	// own model state. Bugbot Low on 751c366: the previous draft read
+	// from `lastSelectedModel` but nothing wrote to it, so the
+	// "remember last model" feature was non-functional. Persist on
+	// successful submit (see below) so reopens default to the user's
+	// last working choice.
+	const LAST_MODEL_KEY = 'rmdg.lastModel';
+
 	// Initialise model from last-used or first available; tracked in a
 	// $effect so subsequent renders don't reset the user's choice.
 	$effect(() => {
 		if (!open) return;
 		if (selectedModel) return;
 		const last =
-			typeof localStorage !== 'undefined' ? localStorage.getItem('lastSelectedModel') || '' : '';
+			typeof localStorage !== 'undefined' ? localStorage.getItem(LAST_MODEL_KEY) || '' : '';
 		const available = $models.map((m) => m.id);
 		if (last && available.includes(last)) {
 			selectedModel = last;
@@ -83,6 +91,17 @@
 				return;
 			}
 			await onSubmit(text, selectedModel);
+			// Persist the model so the next /documents/[id] visit defaults
+			// to it. Done AFTER onSubmit succeeds so a model that produces
+			// rubbish or fails to proposeEdit isn't stuck as the default.
+			if (typeof localStorage !== 'undefined') {
+				try {
+					localStorage.setItem(LAST_MODEL_KEY, selectedModel);
+				} catch {
+					// localStorage quota / private-mode — fail silently;
+					// the picker just doesn't remember next time.
+				}
+			}
 			// Parent closes the modal on success; we reset local state for
 			// the next open. The `open=$bindable` lets the parent flip it.
 			prompt = '';
