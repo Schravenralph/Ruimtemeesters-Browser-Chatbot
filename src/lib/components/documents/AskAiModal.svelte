@@ -101,6 +101,17 @@
 	}
 
 	function humanCompletionError(err: unknown): string {
+		// Bugbot HIGH on 0199cbc: the OWUI client (`generateOpenAIChatCompletion`)
+		// extracts `err?.detail ?? err` before throwing — for the common
+		// FastAPI `{ detail: "..." }` error shape, the thrown value is a
+		// plain string (the detail extracted from the JSON body). Handle
+		// strings BEFORE the typeof-object branch so real auth-failure /
+		// rate-limit / model-not-found messages reach the user instead of
+		// the generic "onbekende fout" fallback.
+		if (typeof err === 'string') {
+			const trimmed = err.trim();
+			if (trimmed) return `Vraag mislukt: ${trimmed}`;
+		}
 		if (err && typeof err === 'object' && 'detail' in err) {
 			const detail = (err as { detail?: string }).detail;
 			if (typeof detail === 'string') return `Vraag mislukt: ${detail}`;

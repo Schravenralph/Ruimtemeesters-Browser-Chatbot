@@ -23,33 +23,30 @@
 	// WI-008: minimal LLM → proposeEdit bridge. Modal returns plain text;
 	// we wrap in the v0 proposal shape the embed accepts (kind:'insert',
 	// document-end paragraph) and hand to the controller. The WI-003
-	// banner then surfaces Accepteren / Afwijzen. proposeEdit can throw —
-	// e.g. ProposalBusyError if another proposal is already pending on
-	// document-end. We swallow into a toast so the modal close path stays
-	// clean; user sees the error and can retry once the prior is resolved.
+	// banner then surfaces Accepteren / Afwijzen.
+	//
+	// Bugbot Medium on 0199cbc: failures here MUST propagate to the
+	// modal so the user sees an inline error AND keeps their prompt. A
+	// previous version swallowed the throw into a toast, but the modal
+	// would then treat onSubmit as success — clearing the prompt and
+	// leaving the modal open with a toast hidden behind its backdrop.
+	// Re-throw both the no-editor case and the proposeEdit failure so
+	// the modal's catch handles them via humanCompletionError.
 	async function handleAskAiSubmit(text: string, model: string): Promise<void> {
 		const el = embedEl as unknown as {
 			proposeEdit?: (proposal: unknown) => Promise<unknown>;
 		} | null;
 		if (!el?.proposeEdit) {
-			toastMessage = 'Editor nog niet geladen — wacht tot het document zichtbaar is.';
-			setTimeout(() => (toastMessage = null), 4000);
-			return;
+			throw new Error('Editor nog niet geladen — wacht tot het document zichtbaar is.');
 		}
-		try {
-			await el.proposeEdit({
-				id: crypto.randomUUID(),
-				kind: 'insert',
-				target: { type: 'document-end' },
-				content: { type: 'paragraph', text },
-				source: { kind: 'chatbot', ref: model }
-			});
-			askAiOpen = false;
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			toastMessage = `Voorstel niet geplaatst: ${msg}`;
-			setTimeout(() => (toastMessage = null), 6000);
-		}
+		await el.proposeEdit({
+			id: crypto.randomUUID(),
+			kind: 'insert',
+			target: { type: 'document-end' },
+			content: { type: 'paragraph', text },
+			source: { kind: 'chatbot', ref: model }
+		});
+		askAiOpen = false;
 	}
 
 	// Surface proposal events as toasts so the developer sees the
