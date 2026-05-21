@@ -13,10 +13,41 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import DocGenEmbed from '$lib/components/documents/DocGenEmbed.svelte';
+	import AskAiModal from '$lib/components/documents/AskAiModal.svelte';
 
 	let documentId = $derived($page.params.id);
 	let embedEl = $state<HTMLElement | null>(null);
 	let toastMessage = $state<string | null>(null);
+	let askAiOpen = $state(false);
+
+	// WI-008: minimal LLM → proposeEdit bridge. Modal returns plain text;
+	// we wrap in the v0 proposal shape the embed accepts (kind:'insert',
+	// document-end paragraph) and hand to the controller. The WI-003
+	// banner then surfaces Accepteren / Afwijzen.
+	//
+	// Bugbot Medium on 0199cbc: failures here MUST propagate to the
+	// modal so the user sees an inline error AND keeps their prompt. A
+	// previous version swallowed the throw into a toast, but the modal
+	// would then treat onSubmit as success — clearing the prompt and
+	// leaving the modal open with a toast hidden behind its backdrop.
+	// Re-throw both the no-editor case and the proposeEdit failure so
+	// the modal's catch handles them via humanCompletionError.
+	async function handleAskAiSubmit(text: string, model: string): Promise<void> {
+		const el = embedEl as unknown as {
+			proposeEdit?: (proposal: unknown) => Promise<unknown>;
+		} | null;
+		if (!el?.proposeEdit) {
+			throw new Error('Editor nog niet geladen — wacht tot het document zichtbaar is.');
+		}
+		await el.proposeEdit({
+			id: crypto.randomUUID(),
+			kind: 'insert',
+			target: { type: 'document-end' },
+			content: { type: 'paragraph', text },
+			source: { kind: 'chatbot', ref: model }
+		});
+		askAiOpen = false;
+	}
 
 	// Surface proposal events as toasts so the developer sees the
 	// integration is alive even without explicit DevTools listeners.
@@ -74,6 +105,14 @@
 			<div class="docgen-view-toolbar">
 				<button
 					type="button"
+					class="docgen-btn-primary"
+					onclick={() => (askAiOpen = true)}
+					disabled={!embedEl}
+				>
+					Vraag de AI
+				</button>
+				<button
+					type="button"
 					class="docgen-btn-secondary"
 					onclick={downloadNow}
 					disabled={!embedEl}
@@ -92,6 +131,11 @@
 		<div class="docgen-view-embed">
 			<DocGenEmbed {documentId} autoCreate theme="light" bind:embedEl />
 		</div>
+		<AskAiModal
+			bind:open={askAiOpen}
+			onSubmit={handleAskAiSubmit}
+			onClose={() => (askAiOpen = false)}
+		/>
 		{#if toastMessage}
 			<div class="docgen-view-toast">{toastMessage}</div>
 		{/if}
@@ -132,6 +176,22 @@
 		cursor: pointer;
 	}
 	.docgen-btn-secondary:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.docgen-btn-primary {
+		background: #2563eb;
+		color: #fff;
+		border: 1px solid #2563eb;
+		border-radius: 0.375rem;
+		padding: 0.4rem 0.85rem;
+		font: inherit;
+		cursor: pointer;
+	}
+	.docgen-btn-primary:hover {
+		background: #1d4ed8;
+	}
+	.docgen-btn-primary:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
