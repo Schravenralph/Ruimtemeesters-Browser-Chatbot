@@ -10,9 +10,4 @@ if [ -x "$HOOKS_DIR/no-public-bind-check.sh" ]; then
   "$HOOKS_DIR/no-public-bind-check.sh"
 fi
 
-# BOPA skill mirror must match canonical in Ruimtemeesters-MCP-Servers.
-if [ -x "$HOOKS_DIR/sync-bopa-skill-check.sh" ]; then
-  "$HOOKS_DIR/sync-bopa-skill-check.sh"
-fi
-
 # Add further checks (typecheck, lint, etc.) below this line.
