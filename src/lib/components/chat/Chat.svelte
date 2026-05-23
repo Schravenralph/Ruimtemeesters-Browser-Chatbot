@@ -108,6 +108,9 @@
 	import Image from '../common/Image.svelte';
 	import { getBanners } from '$lib/apis/configs';
 
+	import { docGenPanelState } from '$lib/integrations/docGen/store';
+	import { getDocGenToolServerEntry } from '$lib/integrations/docGen/toolServersInject';
+
 	export let chatIdProp = '';
 
 	let loading = true;
@@ -2252,13 +2255,24 @@
 				tool_ids: toolIds.length > 0 ? toolIds : undefined,
 				skill_ids: skillIds.length > 0 ? skillIds : undefined,
 				terminal_id: activeTerminalId ?? undefined,
-				tool_servers: [
-					...($toolServers ?? []).filter(
-						(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
-					),
-					// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
-					...($terminalServers ?? []).filter((t) => !t.id)
-				],
+				tool_servers: (() => {
+					// WI-014: when the DG panel is open, expose the docgen_*
+					// tools to the model. Backend treats this as a direct tool
+					// server (middleware.py:2634) and routes calls via the
+					// execute:tool socket event, which our +layout.svelte
+					// handler dispatches to the iframe client.
+					const docGenEntry = getDocGenToolServerEntry({
+						panelOpen: get(docGenPanelState).open
+					});
+					return [
+						...($toolServers ?? []).filter(
+							(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
+						),
+						// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
+						...($terminalServers ?? []).filter((t) => !t.id),
+						...(docGenEntry ? [docGenEntry] : [])
+					];
+				})(),
 				features: getFeatures(),
 				variables: {
 					...getPromptVariables(

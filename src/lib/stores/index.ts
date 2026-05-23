@@ -108,6 +108,22 @@ export const selectedTerminalId: Writable<string | null> = writable(null);
 export const artifactCode = writable(null);
 export const artifactContents = writable(null);
 
+// WI-014: descriptor type documented for grep-ability — the store stays
+// loosely typed (`writable(null)`) so the longstanding optional-chain
+// readers in Embeds.svelte / Citations.svelte / Menu.svelte don't need
+// a wave of type tightening. The new `trusted: boolean` field, when
+// set, makes Embeds.svelte pass allowSameOrigin to FullHeightIframe.
+// DG needs same-origin so its Clerk JS can read localStorage/cookies.
+// Citation embeds leave `trusted` absent so they keep the default sandbox.
+export interface EmbedDescriptor {
+	url: string;
+	title?: string;
+	chatId?: string;
+	messageId?: string;
+	sourceId?: string;
+	source?: unknown;
+	trusted?: boolean;
+}
 export const embed = writable(null);
 
 export const temporaryChatEnabled = writable(false);

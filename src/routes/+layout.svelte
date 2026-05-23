@@ -61,6 +61,8 @@
 	import 'tippy.js/dist/tippy.css';
 
 	import { executeToolServer, getBackendConfig, getModels, getVersion } from '$lib/apis';
+	import { dispatchDocGenToolCall } from '$lib/integrations/docGen/executeToolDispatch';
+	import { getActiveDocGenClient, isDocGenServerUrl } from '$lib/integrations/docGen/store';
 	import { getSessionUser, userSignOut } from '$lib/apis/auths';
 	import { getAllTags, getChatList } from '$lib/apis/chats';
 	import { chatCompletion } from '$lib/apis/openai';
@@ -387,6 +389,24 @@
 	};
 
 	const executeTool = async (data, cb) => {
+		// WI-014: route docgen_* tool calls to the active DG iframe client
+		// instead of through executeToolServer (HTTP). The virtual URL
+		// `rmdg-iframe://docgen` is not a real server — middleware.py
+		// passes our tool_servers entry through, OWUI dispatches to here,
+		// we hand it to the postMessage bridge.
+		if (isDocGenServerUrl(data.server?.url)) {
+			const client = getActiveDocGenClient();
+			const result = await dispatchDocGenToolCall({
+				client,
+				toolName: data.name,
+				params: data.params ?? {}
+			});
+			if (cb) {
+				cb(structuredClone(result));
+			}
+			return;
+		}
+
 		const { toolServer, toolServerData, token } = resolveToolServer(data.server?.url);
 
 		console.log('executeTool', data, toolServer);
