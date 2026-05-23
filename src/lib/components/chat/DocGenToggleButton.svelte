@@ -111,6 +111,18 @@
 			toast.error(i18n.t('Start een chat voordat je een document opent.'));
 			return;
 		}
+		// Bugbot MEDIUM on 91851a09: temporary-chat ids have a `local:`
+		// prefix and aren't persisted server-side, so getChatById /
+		// updateChatById can't bind a docId to them. Block the open with
+		// a clear toast — server-side docId persistence is Ralph's call
+		// (2026-05-22 Q1) and localStorage fallback for temp chats would
+		// re-introduce the cross-browser-drift problem he wanted to avoid.
+		if (initialChatId.startsWith('local:')) {
+			toast.error(
+				i18n.t('Documenten zijn niet beschikbaar in tijdelijke chats. Start een gewone chat.')
+			);
+			return;
+		}
 		// Bugbot HIGH on 289a61f7: openPanel awaits getOrMintDocIdForChat
 		// and iframe polling. The chat-change effect only fires closePanel
 		// when the panel is *already open*; during these awaits the panel
