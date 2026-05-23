@@ -77,6 +77,7 @@
 				src={getSrcUrl($embed?.url ?? '', $embed?.chatId, $embed?.messageId, $embed?.sourceId)}
 				payload={$embed?.source ?? null}
 				iframeClassName="w-full h-full"
+				allowSameOrigin={$embed?.trusted === true}
 			/>
 		</div>
 	</div>
