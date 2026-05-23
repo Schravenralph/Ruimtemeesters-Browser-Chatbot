@@ -112,8 +112,10 @@
 		await showControls.set(true);
 		await showEmbeds.set(true);
 		// Wait for Svelte to mount Embeds.svelte + FullHeightIframe.
-		await tick();
-		const iframeEl = findEmbedIframe();
+		// A single tick() is not enough: FullHeightIframe.setIframeSrc awaits
+		// its own tick() before assigning iframeSrc, and the Embeds pane may
+		// still be expanding. Poll until the iframe appears or a timeout hits.
+		const iframeEl = await waitForEmbedIframe();
 		if (!iframeEl) {
 			// Bugbot MEDIUM on dc20451: previous version returned here
 			// with `embed` + `showEmbeds` still set, leaving the user
@@ -132,6 +134,20 @@
 		disconnectDocGenIframe();
 		showEmbeds.set(false);
 		embed.set(null);
+	}
+
+	async function waitForEmbedIframe(
+		maxWaitMs = 2000,
+		intervalMs = 50
+	): Promise<HTMLIFrameElement | null> {
+		const deadline = Date.now() + maxWaitMs;
+		while (Date.now() < deadline) {
+			await tick();
+			const el = findEmbedIframe();
+			if (el) return el;
+			await new Promise((r) => setTimeout(r, intervalMs));
+		}
+		return null;
 	}
 
 	function findEmbedIframe(): HTMLIFrameElement | null {

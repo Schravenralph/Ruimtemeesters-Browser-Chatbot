@@ -8,12 +8,24 @@
 
 import { docGenToolSpecs, DOC_GEN_SYSTEM_PROMPT, DOC_GEN_VIRTUAL_SERVER_URL } from './tools';
 
+/** Flat tool spec shape expected by OWUI's middleware (top-level name). */
+export interface DirectToolSpec {
+	name: string;
+	description: string;
+	parameters: Record<string, unknown>;
+}
+
 export interface DocGenToolServerEntry {
 	url: string;
 	name: string;
-	specs: typeof docGenToolSpecs;
+	specs: DirectToolSpec[];
 	system_prompt: string;
 }
+
+// OWUI's middleware indexes direct tool specs by `tool['name']` at the
+// top level and later wraps each spec as `{ type: 'function', function: spec }`.
+// Unwrap the OpenAI-shaped specs so the backend gets the flat inner objects.
+const flatSpecs: DirectToolSpec[] = docGenToolSpecs.map((t) => t.function);
 
 /**
  * Returns the chatbot's tool_servers contribution when the DG panel is
@@ -27,7 +39,7 @@ export function getDocGenToolServerEntry(opts: {
 	return {
 		url: DOC_GEN_VIRTUAL_SERVER_URL,
 		name: 'docgen',
-		specs: docGenToolSpecs,
+		specs: flatSpecs,
 		system_prompt: DOC_GEN_SYSTEM_PROMPT
 	};
 }
