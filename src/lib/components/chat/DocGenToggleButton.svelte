@@ -64,15 +64,29 @@
 		}
 	});
 
-	// Bugbot MEDIUM on dc20451: the user can close the Embeds panel via
-	// the X button inside Embeds.svelte itself, which clears `embed` /
-	// `showEmbeds` but doesn't know about our docgen client. Watch the
-	// `embed` store — if it goes null while we still think the panel is
-	// open, run our close path so tools stop injecting and the toolbar
-	// button updates.
+	// Bugbot MEDIUM on dc20451 + d121fc9: the embed rail can desync from
+	// docgen state in three ways:
+	//   1. Embeds.svelte X-button clears `embed` + `showEmbeds` (no docgen
+	//      knowledge).
+	//   2. Another caller (e.g. Citations) replaces `embed` with a
+	//      different descriptor — our iframe is no longer mounted.
+	//   3. Another caller flips `showEmbeds` off without nulling `embed`.
+	// In all cases the docgen client still tries to postMessage to a now-
+	// gone iframe, the model still receives docgen_* tools, and the
+	// toolbar still claims the panel is open. Close the panel as soon as
+	// the active embed is no longer ours OR the rail is hidden.
+	function embedIsOurDocGen(e: EmbedDescriptor | null): boolean {
+		return (
+			e !== null &&
+			e?.trusted === true &&
+			typeof e?.url === 'string' &&
+			e.url.startsWith(RMDG_IFRAME_BASE)
+		);
+	}
 	$effect(() => {
-		const e = $embed;
-		if ($docGenPanelState.open && e === null) {
+		if (!$docGenPanelState.open) return;
+		const e = $embed as EmbedDescriptor | null;
+		if (!embedIsOurDocGen(e) || !$showEmbeds) {
 			closePanel();
 		}
 	});
