@@ -13,6 +13,8 @@
 	//   - On close: disconnects the client, clears showEmbeds + embed.
 
 	import { tick, getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { toast } from 'svelte-sonner';
 
 	import { chatId, embed, showControls, showEmbeds, user, type EmbedDescriptor } from '$lib/stores';
@@ -26,7 +28,10 @@
 		openDocGenIframe
 	} from '$lib/integrations/docGen/store';
 
-	const i18n = getContext<{ t: (k: string) => string }>('i18n');
+	// OWUI's i18n context is a Writable store, not a plain { t }. Auto-
+	// subscribe with the $-prefix in both script and template. See
+	// Chat.svelte:8 for the canonical declaration pattern.
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	// Production override + sensible default for the DG iframe URL. Mirrors
 	// the WI-013 iframe-embed.html entry. PUBLIC_RMDG_IFRAME_BASE lets ops
@@ -108,7 +113,7 @@
 	async function openPanel() {
 		const initialChatId = $chatId;
 		if (!initialChatId) {
-			toast.error(i18n.t('Start een chat voordat je een document opent.'));
+			toast.error($i18n.t('Start een chat voordat je een document opent.'));
 			return;
 		}
 		// Bugbot MEDIUM on 91851a09: temporary-chat ids have a `local:`
@@ -119,7 +124,7 @@
 		// re-introduce the cross-browser-drift problem he wanted to avoid.
 		if (initialChatId.startsWith('local:')) {
 			toast.error(
-				i18n.t('Documenten zijn niet beschikbaar in tijdelijke chats. Start een gewone chat.')
+				$i18n.t('Documenten zijn niet beschikbaar in tijdelijke chats. Start een gewone chat.')
 			);
 			return;
 		}
@@ -137,7 +142,7 @@
 			docId = await getOrMintDocIdForChat(localStorage.token, initialChatId);
 		} catch (err) {
 			console.error('docGen: failed to read/mint docId for chat', err);
-			toast.error(i18n.t('Kon de document-id voor deze chat niet ophalen.'));
+			toast.error($i18n.t('Kon de document-id voor deze chat niet ophalen.'));
 			return;
 		}
 		if (!stillSameChat()) return;
@@ -169,7 +174,7 @@
 			// with `embed` + `showEmbeds` still set, leaving the user
 			// with an empty embed rail and no connected client. Clear
 			// the stores so the chat returns to its normal layout.
-			toast.error(i18n.t('Document-paneel kon niet worden gestart.'));
+			toast.error($i18n.t('Document-paneel kon niet worden gestart.'));
 			console.error('docGen: iframe element not found after panel open');
 			showEmbeds.set(false);
 			embed.set(null);
@@ -211,7 +216,7 @@
 </script>
 
 {#if $user?.role === 'admin' || ($user?.permissions?.chat?.controls ?? true)}
-	<Tooltip content={i18n.t($docGenPanelState.open ? 'Document sluiten' : 'Document openen')}>
+	<Tooltip content={$i18n.t($docGenPanelState.open ? 'Document sluiten' : 'Document openen')}>
 		<button
 			type="button"
 			class="flex cursor-pointer px-2 py-2 rounded-xl transition {$docGenPanelState.open
@@ -219,7 +224,7 @@
 				: 'hover:bg-gray-50 dark:hover:bg-gray-850'}"
 			onclick={toggle}
 			disabled={busy}
-			aria-label={i18n.t($docGenPanelState.open ? 'Document sluiten' : 'Document openen')}
+			aria-label={$i18n.t($docGenPanelState.open ? 'Document sluiten' : 'Document openen')}
 			aria-pressed={$docGenPanelState.open}
 		>
 			<div class="m-auto self-center">
