@@ -90,7 +90,12 @@ def inline_image(picture_url: str) -> Optional[str]:
             return None
         mime = mimetypes.guess_type(picture_url)[0]
         if mime is None:
-            mime = resp.headers.get('content-type', 'image/jpeg').split(';')[0].strip()
+            # Match OAuthManager._process_picture_url: default to image/jpeg
+            # when the URL has no recognisable extension. Same default keeps
+            # backfill output byte-identical to OIDC sync, which preserves
+            # idempotency (otherwise the next OIDC login would rewrite the
+            # row with a different data: prefix).
+            mime = 'image/jpeg'
         encoded = base64.b64encode(resp.content).decode('utf-8')
         return f'data:{mime};base64,{encoded}'
     except Exception as e:
@@ -145,8 +150,14 @@ def main() -> int:
             stats['no_clerk_match'] += 1
             continue
 
-        # Reload user to get profile_image_url (get_users() defers that column)
+        # Reload user to get profile_image_url (get_users() defers that column).
+        # If the user was deleted between get_users() and now, skip rather than
+        # crashing the whole run on AttributeError.
         full_user = Users.get_user_by_id(owui_user.id)
+        if full_user is None:
+            log.warning('  %s: user %s disappeared mid-run → skipped', owui_user.email, owui_user.id)
+            stats['errors'] += 1
+            continue
         updates: dict[str, str] = {}
 
         # Name: Clerk wins if it has a non-empty value
@@ -184,8 +195,16 @@ def main() -> int:
             log.info('    %s: %r → %r', k, before[k], after[k])
 
         if not args.dry_run:
-            Users.update_user_by_id(owui_user.id, updates)
-            stats['updated'] += 1
+            # update_user_by_id returns the new UserModel on success, None on
+            # any DB failure (it catches Exception and prints). We mustn't
+            # count a None return as success, otherwise stats lie and the
+            # exit code stays 0 on a fully-broken run.
+            result = Users.update_user_by_id(owui_user.id, updates)
+            if result is None:
+                log.error('  %s: DB write returned None — failure', owui_user.email)
+                stats['errors'] += 1
+            else:
+                stats['updated'] += 1
         else:
             stats['updated'] += 1  # counted as "would update"
 
