@@ -13,6 +13,7 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
+		theme,
 		user
 	} from '$lib/stores';
 
@@ -41,9 +42,50 @@
 	import Knobs from '../icons/Knobs.svelte';
 
 	import DocGenToggleButton from './DocGenToggleButton.svelte';
+	import Sun from '../icons/Sun.svelte';
+	import Moon from '../icons/Moon.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	const i18n = getContext('i18n');
+
+	// Resolve the current effective theme — `<html class="dark">` is the
+	// source of truth in OWUI (Settings/General.svelte's applyTheme adds
+	// it). The `theme` store can hold 'system'/'oled-dark'/'her' etc.,
+	// none of which map directly to a binary toggle.
+	let isDark = false;
+	function syncIsDark() {
+		if (typeof document !== 'undefined') {
+			isDark = document.documentElement.classList.contains('dark');
+		}
+	}
+	$: $theme, syncIsDark();
+
+	// Minimal apply for a light/dark flip. Mirrors the path
+	// Settings/General.svelte takes (without the OLED / `her` / system
+	// branches) — we're only toggling between the two canonical modes
+	// here. Persisting to localStorage keeps the choice across reloads
+	// without going through the Settings modal.
+	function toggleTheme() {
+		const next = isDark ? 'light' : 'dark';
+		theme.set(next);
+		try {
+			localStorage.setItem('theme', next);
+		} catch {}
+		if (next === 'dark') {
+			document.documentElement.classList.remove('light');
+			document.documentElement.classList.add('dark');
+			document.documentElement.style.setProperty('--color-gray-800', '#333');
+			document.documentElement.style.setProperty('--color-gray-850', '#262626');
+			document.documentElement.style.setProperty('--color-gray-900', '#171717');
+			document.documentElement.style.setProperty('--color-gray-950', '#0d0d0d');
+		} else {
+			document.documentElement.classList.remove('dark');
+			document.documentElement.classList.add('light');
+		}
+		const meta = document.querySelector('meta[name="theme-color"]');
+		if (meta) meta.setAttribute('content', next === 'dark' ? '#171717' : '#ffffff');
+		syncIsDark();
+	}
 
 	export let initNewChat: Function;
 	export let shareEnabled: boolean = false;
@@ -223,6 +265,24 @@
 
 					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
 						<DocGenToggleButton />
+
+						<Tooltip content={$i18n.t(isDark ? 'Schakel naar licht' : 'Schakel naar donker')}>
+							<button
+								type="button"
+								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+								on:click={toggleTheme}
+								aria-label={$i18n.t(isDark ? 'Schakel naar licht' : 'Schakel naar donker')}
+								aria-pressed={isDark}
+							>
+								<div class=" m-auto self-center">
+									{#if isDark}
+										<Sun className=" size-10" strokeWidth="1.5" />
+									{:else}
+										<Moon className=" size-10" strokeWidth="1.5" />
+									{/if}
+								</div>
+							</button>
+						</Tooltip>
 
 						<Tooltip content={$i18n.t('Controls')}>
 							<button
