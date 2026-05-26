@@ -78,15 +78,19 @@ export async function openDocGenPanelForCurrentChat(
 		}
 	})();
 
-	const panel = get(docGenPanelState);
-	if (panel.open && panel.docId) {
-		return { ok: true, docId: panel.docId, reopened: true };
-	}
-
 	const initialChatId = get(chatIdStore);
 	if (!initialChatId) {
 		toast.error(t('Start een chat voordat je een document opent.'));
 		return { ok: false, reason: 'no-chat' };
+	}
+
+	// Idempotent reopen: only short-circuit when the still-open panel
+	// belongs to the SAME chat as the click. Without the chat-id check,
+	// "open doc in chat A → switch to chat B → click open doc" returned
+	// chat A's docId for chat B (Bugbot HIGH on 875106c follow-up).
+	const panel = get(docGenPanelState);
+	if (panel.open && panel.docId && panel.chatId === initialChatId) {
+		return { ok: true, docId: panel.docId, reopened: true };
 	}
 	// Temp-chat ids (`local:` prefix) aren't persisted server-side, so we
 	// can't bind a docId to them via chat.meta. Same guard as the toggle
@@ -133,7 +137,7 @@ export async function openDocGenPanelForCurrentChat(
 		return { ok: false, reason: 'iframe-mount-failed' };
 	}
 
-	openDocGenIframe({ iframe: iframeEl, docId, iframeOrigin });
+	openDocGenIframe({ iframe: iframeEl, docId, chatId: initialChatId, iframeOrigin });
 	return { ok: true, docId };
 }
 
