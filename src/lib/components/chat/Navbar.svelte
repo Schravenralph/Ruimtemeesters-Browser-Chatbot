@@ -263,41 +263,41 @@
 						</Menu>
 					{/if}
 
-					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
-						<DocGenToggleButton />
+				<Tooltip content={$i18n.t(isDark ? 'Schakel naar licht' : 'Schakel naar donker')}>
+					<button
+						type="button"
+						class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+						on:click={toggleTheme}
+						aria-label={$i18n.t(isDark ? 'Schakel naar licht' : 'Schakel naar donker')}
+						aria-pressed={isDark}
+					>
+						<div class=" m-auto self-center">
+							{#if isDark}
+								<Sun className=" size-10" strokeWidth="1.5" />
+							{:else}
+								<Moon className=" size-10" strokeWidth="1.5" />
+							{/if}
+						</div>
+					</button>
+				</Tooltip>
 
-						<Tooltip content={$i18n.t(isDark ? 'Schakel naar licht' : 'Schakel naar donker')}>
-							<button
-								type="button"
-								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-								on:click={toggleTheme}
-								aria-label={$i18n.t(isDark ? 'Schakel naar licht' : 'Schakel naar donker')}
-								aria-pressed={isDark}
-							>
-								<div class=" m-auto self-center">
-									{#if isDark}
-										<Sun className=" size-10" strokeWidth="1.5" />
-									{:else}
-										<Moon className=" size-10" strokeWidth="1.5" />
-									{/if}
-								</div>
-							</button>
-						</Tooltip>
+				{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
+					<DocGenToggleButton />
 
-						<Tooltip content={$i18n.t('Controls')}>
-							<button
-								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-								on:click={async () => {
-									await showControls.set(!$showControls);
-								}}
-								aria-label="Controls"
-							>
-								<div class=" m-auto self-center">
-									<Knobs className=" size-10" strokeWidth="1" />
-								</div>
-							</button>
-						</Tooltip>
-					{/if}
+					<Tooltip content={$i18n.t('Controls')}>
+						<button
+							class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+							on:click={async () => {
+								await showControls.set(!$showControls);
+							}}
+							aria-label="Controls"
+						>
+							<div class=" m-auto self-center">
+								<Knobs className=" size-10" strokeWidth="1" />
+							</div>
+						</button>
+					</Tooltip>
+				{/if}
 
 					{#if $user !== undefined && $user !== null}
 						<UserMenu
