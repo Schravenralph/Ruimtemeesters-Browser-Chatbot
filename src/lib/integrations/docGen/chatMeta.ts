@@ -65,6 +65,7 @@ export async function getOrMintDocIdForChat(
 		// stored id and let the iframe surface the real error.
 		const probe = await probeDocGenDocument(existing, apiBase);
 		if (probe !== 'missing') return existing;
+		return mintAndPersistDocId(token, chatId, apiBase, existing);
 	}
 	return mintAndPersistDocId(token, chatId, apiBase);
 }
@@ -80,7 +81,8 @@ async function readDocIdFromChat(token: string, chatId: string): Promise<string 
 async function mintAndPersistDocId(
 	token: string,
 	chatId: string,
-	apiBase: string
+	apiBase: string,
+	alreadyProbedMissing?: string
 ): Promise<string> {
 	const raw = (await getChatById(token, chatId)) as ChatShape | null;
 	// Bugbot HIGH on 289a61f7: if getChatById returns null/empty, the
@@ -93,6 +95,21 @@ async function mintAndPersistDocId(
 		throw new Error(
 			`docGen chatMeta: cannot mint docId — getChatById returned no chat for '${chatId}'`
 		);
+	}
+
+	// The first readDocIdFromChat may have returned null due to a
+	// transient getChatById failure. Now that we have the chat, check
+	// whether it already carries a docId and probe before minting.
+	// Skip if this is the same id that getOrMintDocIdForChat already
+	// probed and confirmed missing.
+	const existingDocId = (inner as ChatShape).meta?.docgen?.docId;
+	if (
+		typeof existingDocId === 'string' &&
+		existingDocId.length > 0 &&
+		existingDocId !== alreadyProbedMissing
+	) {
+		const probe = await probeDocGenDocument(existingDocId, apiBase);
+		if (probe !== 'missing') return existingDocId;
 	}
 
 	// Seed the doc title from the chat title (if any), so the user sees
