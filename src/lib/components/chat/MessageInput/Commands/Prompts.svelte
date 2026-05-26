@@ -9,6 +9,13 @@
 
 	export let query = '';
 	export let onSelect = (e) => {};
+	/**
+	 * Mouse-hover callback used by the WI-015 Slash composite to keep its
+	 * shared keyboard cursor (globalIdx) in sync with the actually-hovered
+	 * row. Stock `/`-only consumers leave it null; the local highlight
+	 * still updates via `selectedPromptIdx` below.
+	 */
+	export let onHover: ((localIdx: number) => void) | null = null;
 
 	let selectedPromptIdx = 0;
 	export let filteredItems = [];
@@ -55,6 +62,17 @@
 			onSelect({ type: 'prompt', data: command });
 		}
 	};
+
+	// Hooks for the WI-015 Slash composite that shares one keyboard
+	// cursor across Actions + Prompts. Stock `/`-only consumers ignore
+	// these; they only mutate internal highlight state.
+	export const setSelectedIdx = (idx: number) => {
+		if (idx < 0 || idx >= filteredItems.length) return;
+		selectedPromptIdx = idx;
+	};
+	export const clearSelected = () => {
+		selectedPromptIdx = -1;
+	};
 </script>
 
 <div class="px-2 text-xs text-gray-500 py-1">
@@ -75,6 +93,7 @@
 					}}
 					on:mousemove={() => {
 						selectedPromptIdx = promptIdx;
+						onHover?.(promptIdx);
 					}}
 					on:focus={() => {}}
 					data-selected={promptIdx === selectedPromptIdx}
