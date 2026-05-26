@@ -64,15 +64,15 @@ describe('documentActionGate (Bugbot PR #132 fix)', () => {
 	});
 
 	it('admits non-admins when chat.controls is explicitly true', () => {
-		expect(
-			documentActionGate({ role: 'user', permissions: { chat: { controls: true } } })
-		).toBe(true);
+		expect(documentActionGate({ role: 'user', permissions: { chat: { controls: true } } })).toBe(
+			true
+		);
 	});
 
 	it('denies non-admins when chat.controls is explicitly false', () => {
-		expect(
-			documentActionGate({ role: 'user', permissions: { chat: { controls: false } } })
-		).toBe(false);
+		expect(documentActionGate({ role: 'user', permissions: { chat: { controls: false } } })).toBe(
+			false
+		);
 	});
 });
 

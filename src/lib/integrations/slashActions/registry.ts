@@ -96,7 +96,5 @@ export function filterSlashActions(
 	const visible = slashActions.filter((a) => !a.gate || a.gate(user));
 	const q = query.trim().toLowerCase();
 	if (!q) return visible;
-	return visible.filter(
-		(a) => a.id.toLowerCase().includes(q) || a.label.toLowerCase().includes(q)
-	);
+	return visible.filter((a) => a.id.toLowerCase().includes(q) || a.label.toLowerCase().includes(q));
 }

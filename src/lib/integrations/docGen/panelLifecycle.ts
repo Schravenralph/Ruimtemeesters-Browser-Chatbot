@@ -32,7 +32,10 @@ export interface OpenDocGenPanelOptions {
 
 export type OpenDocGenPanelResult =
 	| { ok: true; docId: string; reopened?: boolean }
-	| { ok: false; reason: 'no-chat' | 'temp-chat' | 'mint-failed' | 'iframe-mount-failed' | 'chat-switched' };
+	| {
+			ok: false;
+			reason: 'no-chat' | 'temp-chat' | 'mint-failed' | 'iframe-mount-failed' | 'chat-switched';
+	  };
 
 export const DOCGEN_IFRAME_BASE =
 	(import.meta.env?.VITE_RMDG_IFRAME_BASE as string | undefined) ??
@@ -89,9 +92,7 @@ export async function openDocGenPanelForCurrentChat(
 	// can't bind a docId to them via chat.meta. Same guard as the toggle
 	// button (WI-014 Bugbot MEDIUM on 91851a09).
 	if (initialChatId.startsWith('local:')) {
-		toast.error(
-			t('Documenten zijn niet beschikbaar in tijdelijke chats. Start een gewone chat.')
-		);
+		toast.error(t('Documenten zijn niet beschikbaar in tijdelijke chats. Start een gewone chat.'));
 		return { ok: false, reason: 'temp-chat' };
 	}
 
