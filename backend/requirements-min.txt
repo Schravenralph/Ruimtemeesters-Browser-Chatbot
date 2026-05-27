@@ -20,6 +20,7 @@ aiohttp==3.13.2 # do not update to 3.13.3 - broken
 async-timeout
 aiocache
 aiofiles
+starlette>=1.0.1  # security floor: AIKIDO-2026-10923 + CVE-2024-47874
 starlette-compress==1.7.0
 Brotli==1.1.0
 httpx[socks,http2,zstd,cli,brotli]==0.28.1
