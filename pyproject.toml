@@ -25,6 +25,7 @@ dependencies = [
     "async-timeout==5.0.1",
     "aiocache==0.12.3",
     "aiofiles==25.1.0",
+    "starlette>=1.0.1",  # security floor: AIKIDO-2026-10923 + CVE-2024-47874
     "starlette-compress==1.7.0",
     "Brotli==1.1.0",
     "httpx[socks,http2,zstd,cli,brotli]==0.28.1",
