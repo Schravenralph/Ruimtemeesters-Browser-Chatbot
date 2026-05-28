@@ -70,6 +70,8 @@
 			.sort((a, b) => b.count - a.count || a.owner_user_id.localeCompare(b.owner_user_id));
 	};
 
+	$: owners = stats ? aggregateOwners(stats.banks) : [];
+
 	const totalDocs = (banks: BankStats[]): number =>
 		banks.reduce((sum, b) => sum + b.document_count, 0);
 
@@ -194,13 +196,16 @@
 									<td class="py-1 text-right">{bank.document_count}</td>
 									<td class="py-1 text-right">
 										{#if bank.fact_count === null}
-											<span class="text-gray-400" title={$i18n.t('bank not in /v1/default/banks')}>—</span>
+											<span class="text-gray-400" title={$i18n.t('bank not in /v1/default/banks')}
+												>—</span
+											>
 										{:else}
 											{bank.fact_count}
 										{/if}
 									</td>
 									<td class="py-1 pl-3 font-mono text-gray-600 dark:text-gray-400">
 										{Object.entries(bank.by_type)
+											.sort(([, a], [, b]) => b - a)
 											.slice(0, 3)
 											.map(([t, n]) => `${t}=${n}`)
 											.join(', ') || '—'}
@@ -259,7 +264,7 @@
 						>
 					</h3>
 				</header>
-				{#if aggregateOwners(stats.banks).length === 0}
+				{#if owners.length === 0}
 					<p class="text-xs text-gray-500">{$i18n.t('No per-user activity yet.')}</p>
 				{:else}
 					<table class="w-full text-xs">
@@ -270,7 +275,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each aggregateOwners(stats.banks).slice(0, TOP_USERS) as row}
+							{#each owners.slice(0, TOP_USERS) as row}
 								<tr class="border-t border-gray-100 dark:border-gray-800">
 									<td class="py-1 font-mono break-all">{row.owner_user_id}</td>
 									<td class="py-1 text-right">{row.count}</td>
@@ -278,10 +283,10 @@
 							{/each}
 						</tbody>
 					</table>
-					{#if aggregateOwners(stats.banks).length > TOP_USERS}
+					{#if owners.length > TOP_USERS}
 						<div class="text-xs text-gray-500 mt-1">
 							{$i18n.t('… and {{count}} more', {
-								count: aggregateOwners(stats.banks).length - TOP_USERS
+								count: owners.length - TOP_USERS
 							})}
 						</div>
 					{/if}
