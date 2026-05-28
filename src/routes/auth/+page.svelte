@@ -114,29 +114,25 @@
 	};
 
 	const oauthCallbackHandler = async () => {
-		// Get the value of the 'token' cookie
-		function getCookie(name) {
-			const match = document.cookie.match(
-				new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)')
-			);
-			return match ? decodeURIComponent(match[1]) : null;
-		}
-
-		const token = getCookie('token');
-		if (!token) {
+		// The OAuth callback sets an httpOnly `token` cookie that JS cannot
+		// read. To bootstrap the SPA we call GET /api/v1/auths/ — the cookie
+		// is sent automatically via `credentials: 'include'` (inside
+		// getSessionUser) and the JWT comes back in the response body. We
+		// then persist it to localStorage for subsequent Bearer-header use.
+		// If the response includes a `token` field, this was a fresh OAuth
+		// handoff; otherwise the user is already logged in via localStorage.
+		const cameFromOauth = $page.url.searchParams.get('oauth_callback') === '1';
+		if (!cameFromOauth) {
 			return;
 		}
 
-		const sessionUser = await getSessionUser(token).catch((error) => {
-			toast.error(`${error}`);
-			return null;
-		});
+		const sessionUser = await getSessionUser(null).catch(() => null);
 
-		if (!sessionUser) {
+		if (!sessionUser || !sessionUser.token) {
 			return;
 		}
 
-		localStorage.token = token;
+		localStorage.token = sessionUser.token;
 		await setSessionUser(sessionUser, localStorage.getItem('redirectPath') || null);
 	};
 
@@ -197,13 +193,16 @@
 		} else if (
 			$config?.oauth?.providers?.oidc &&
 			!$page.url.searchParams.get('error') &&
+			$page.url.searchParams.get('oauth_callback') !== '1' &&
 			(!$config?.features.enable_login_form ||
-				(document.cookie.includes('__client_uat') && !document.cookie.includes('token=')))
+				(document.cookie.includes('__client_uat') && !localStorage.token))
 		) {
 			// Auto-redirect to OIDC when:
 			// 1. Login form is disabled (original behavior), OR
 			// 2. User has a Clerk session cookie but no OpenWebUI token yet
-			// Skip if error param or token cookie exists (prevents redirect loop after OIDC callback)
+			// Skip if error param, oauth_callback flag, or localStorage token exists
+			// (prevents redirect loop after OIDC callback — the `token` cookie is
+			// now httpOnly so we can no longer probe it from JS).
 			window.location.href = `${WEBUI_BASE_URL}/oauth/oidc/login`;
 		} else {
 			onboarding = $config?.onboarding ?? false;

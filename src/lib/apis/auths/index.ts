@@ -82,15 +82,24 @@ export const updateAdminConfig = async (token: string, body: object) => {
 	return res;
 };
 
-export const getSessionUser = async (token: string) => {
+export const getSessionUser = async (token: string | null) => {
 	let error = null;
+
+	// When `token` is null, the backend authenticates via the httpOnly
+	// `token` cookie sent automatically by `credentials: 'include'`. This
+	// is how the OAuth callback handoff works: the cookie is httpOnly,
+	// so JS cannot read it, but this fetch can still ride on it to
+	// retrieve the JWT from the response body for localStorage.
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json'
+	};
+	if (token) {
+		headers.Authorization = `Bearer ${token}`;
+	}
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/`, {
 		method: 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`
-		},
+		headers,
 		credentials: 'include'
 	})
 		.then(async (res) => {

@@ -169,10 +169,17 @@ async def get_session_user(
     user=Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
+    # Resolve the JWT from Authorization header (preferred for API/Bearer
+    # clients) or fall back to the httpOnly `token` cookie (used by the
+    # OAuth callback bootstrap, where the SvelteKit /auth page calls this
+    # endpoint with `credentials: 'include'` and no Authorization header).
     auth_header = request.headers.get('Authorization')
     auth_token = get_http_authorization_cred(auth_header)
-    token = auth_token.credentials
-    data = decode_token(token)
+    if auth_token is not None:
+        token = auth_token.credentials
+    else:
+        token = request.cookies.get('token')
+    data = decode_token(token) if token else None
 
     expires_at = None
 
