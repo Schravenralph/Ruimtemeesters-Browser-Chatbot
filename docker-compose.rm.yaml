@@ -111,7 +111,16 @@ services:
       - WEBUI_AUTH_COOKIE_SAME_SITE=${WEBUI_AUTH_COOKIE_SAME_SITE:-lax}
       - WEBUI_AUTH_COOKIE_SECURE=${WEBUI_AUTH_COOKIE_SECURE:-false}
       # --- Auth (Clerk OIDC) ---
-      - ENABLE_OAUTH_SIGNUP=${ENABLE_OAUTH_SIGNUP:-true}
+      # SECURITY 2026-05-28: chatbot.datameesters.nl is internet-exposed via Caddy with
+      # no auth gate at the proxy. With OAUTH_SIGNUP=true and ENABLE_SIGNUP=true (the
+      # open-webui default), any Clerk-authenticated visitor — or anyone hitting the
+      # native /api/v1/auths/signup endpoint — could self-provision a `user`-role
+      # account in front of upstream open-webui routes (with live secrets on container
+      # env: sk_live_ Clerk, LLM keys, MEMORY_GATEWAY_TOKEN). Both defaults flipped to
+      # false. To grant access, an admin must manually add the user in the open-webui
+      # admin UI (or seed via DB).
+      - ENABLE_OAUTH_SIGNUP=${ENABLE_OAUTH_SIGNUP:-false}
+      - ENABLE_SIGNUP=${ENABLE_SIGNUP:-false}
       # Clerk auth IS the auth: a verified Clerk OIDC token means the user is in.
       # Override OpenWebUI's "pending" default so first-time OIDC signups land active,
       # matching the trust model in projectbeheer / other RM apps.
