@@ -37,6 +37,13 @@ export interface MemoryDetail extends MemoryEntry {
 
 export interface ListMemoriesOutput {
 	entries: MemoryEntry[];
+	/**
+	 * Canonical id of the calling user as the BFF forwarded it to rm-memory
+	 * (`clerk:<sub>` for OAuth users, the gateway key name for direct-login
+	 * admins). Compare against {@link MemoryEntry.owner_user_id} to decide
+	 * ownership — the local OWUI `$user.id` is a UUID and never matches.
+	 */
+	caller_id?: string;
 }
 
 export interface SaveMemoryInput {

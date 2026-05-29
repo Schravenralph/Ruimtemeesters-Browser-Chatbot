@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
 
-	import { user } from '$lib/stores';
 	import {
 		listMemories,
 		getMemoryEntry,
@@ -20,6 +19,7 @@
 	// --- state --------------------------------------------------------------
 
 	let entries: MemoryEntry[] = [];
+	let callerId: string | null = null;
 	let loading = true;
 	let errorMsg: string | null = null;
 
@@ -72,7 +72,12 @@
 	const canMutate = (entry: MemoryEntry): boolean => {
 		// Only the owner can edit/forget. `global`-scope entries are
 		// read-only from this panel (admins manage them out-of-band).
-		return entry.scope !== 'global' && entry.owner_user_id === ($user?.id ?? '');
+		// The BFF surfaces the canonical id it forwarded to rm-memory
+		// (`clerk:<sub>` for OAuth users, gateway-key name for direct-login
+		// admins) — compare against that, not against `$user.id` (which is
+		// the OWUI UUID and never matches the MCP's prefixed identities).
+		if (!callerId) return false;
+		return entry.scope !== 'global' && entry.owner_user_id === callerId;
 	};
 
 	$: filteredEntries = (() => {
@@ -114,11 +119,13 @@
 			const result = await listMemories(localStorage.token, { limit: 200 });
 			if (myId !== listRequestId) return;
 			entries = result.entries;
+			callerId = result.caller_id ?? null;
 		} catch (e: any) {
 			if (myId !== listRequestId) return;
 			const raw = typeof e === 'string' ? e : (e?.detail ?? String(e));
 			errorMsg = raw || 'request failed';
 			entries = [];
+			callerId = null;
 		} finally {
 			if (myId === listRequestId) loading = false;
 		}
