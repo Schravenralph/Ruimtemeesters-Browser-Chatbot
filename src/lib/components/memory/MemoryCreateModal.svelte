@@ -52,6 +52,14 @@
 		setTimeout(reset, 200);
 	}
 
+	// Clear the project id whenever scope moves away from 'project'.
+	// Without this the user could type a project id under scope=project,
+	// switch scope to user/global, and hit "project_id must be empty"
+	// from validate() — but the input is hidden so they can't fix it.
+	$: if (scope !== 'project' && projectId) {
+		projectId = '';
+	}
+
 	const validate = (): string | null => {
 		if (!name.trim()) return $i18n.t('Name is required.');
 		if (name.length > NAME_MAX) return $i18n.t('Name must be ≤120 chars.');
