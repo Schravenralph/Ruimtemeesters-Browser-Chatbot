@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,10 +29,18 @@ router = APIRouter()
 
 DEFAULT_SKILLS_URL = 'http://rm-skills:4101'
 SKILLS_TIMEOUT_S = 5.0
-MAX_SKILLS = 5  # Must match skills_context filter's Valves.max_skills default.
+DEFAULT_MAX_SKILLS = 5
 SKILLS_CONTEXT_FUNCTION_ID = 'skills_context'
 
-PERSONA = Literal['ro-assistent', 'juridisch-assistent', 'commercieel-assistent']
+_PERSONA_MAP: dict[str, str] = {
+    'rm-assistent': 'ro-assistent',
+    'rm-ro-assistent': 'ro-assistent',
+    'rm-juridisch-assistent': 'juridisch-assistent',
+    'rm-commercieel-assistent': 'commercieel-assistent',
+    'ro-assistent': 'ro-assistent',
+    'juridisch-assistent': 'juridisch-assistent',
+    'commercieel-assistent': 'commercieel-assistent',
+}
 
 
 class ActiveSkill(BaseModel):
@@ -91,10 +99,96 @@ def _user_opted_out(user: Any) -> bool:
     return False
 
 
+def _read_admin_valves() -> dict:
+    """Read the admin-level valves for the skills_context filter function."""
+    try:
+        valves = Functions.get_function_valves_by_id(SKILLS_CONTEXT_FUNCTION_ID)
+        if isinstance(valves, dict):
+            return valves
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
+
+
+def _resolve_persona(model_id: str) -> str:
+    """Resolve persona slug from model id — mirrors the filter's logic.
+
+    Order:
+      1. Exact map lookup
+      2. Lowercased map lookup
+      3. Fall-through: strip `rm-` prefix and return lowercased
+    """
+    if not model_id:
+        return ''
+    trimmed = model_id.strip()
+    if trimmed in _PERSONA_MAP:
+        return _PERSONA_MAP[trimmed]
+    lowered = trimmed.lower()
+    if lowered in _PERSONA_MAP:
+        return _PERSONA_MAP[lowered]
+    if lowered.startswith('rm-'):
+        return lowered[len('rm-') :]
+    return lowered
+
+
+def _model_in_scope(model_id: str, admin_valves: dict) -> bool:
+    """Check if model_id is in the admin-configured target_models set."""
+    raw = admin_valves.get('target_models', '')
+    if not isinstance(raw, str) or not raw.strip():
+        return True
+    targets = {m.strip() for m in raw.split(',') if m.strip()}
+    if not targets:
+        return True
+    return model_id.strip() in targets
+
+
+def _effective_max_skills(admin_valves: dict) -> int:
+    """Return the max_skills cap from admin valves, falling back to the default."""
+    val = admin_valves.get('max_skills', DEFAULT_MAX_SKILLS)
+    if not isinstance(val, int) or val < 1:
+        return DEFAULT_MAX_SKILLS
+    return val
+
+
+async def _fetch_verified_skills(persona: str, admin_valves: dict, user: Any) -> list[ActiveSkill]:
+    """Fetch mandatory skills from rm-skills and verify each body is accessible."""
+    headers: dict[str, str] = {
+        'Authorization': f'Bearer {_resolve_gateway_token()}',
+        'Accept': 'application/json',
+    }
+    forwarded = _forwarded_user_id(user)
+    if forwarded:
+        headers['X-Forwarded-User'] = forwarded
+
+    base_url = _resolve_skills_url().rstrip('/')
+    url = f'{base_url}/api/v1/skills'
+
+    async with httpx.AsyncClient(timeout=SKILLS_TIMEOUT_S) as client:
+        resp = await client.get(url, params={'persona': persona}, headers=headers)
+        resp.raise_for_status()
+        payload = resp.json()
+
+        mandatory = _parse_mandatory(payload, _effective_max_skills(admin_valves))
+
+        verified: list[ActiveSkill] = []
+        for skill in mandatory:
+            body_url = f'{base_url}/api/v1/skills/{skill.name}'
+            try:
+                body_resp = await client.get(body_url, headers=headers)
+                body_resp.raise_for_status()
+                body_data = body_resp.json()
+                if isinstance(body_data, dict) and body_data.get('skill_md'):
+                    verified.append(skill)
+            except (httpx.HTTPError, ValueError):
+                log.debug('Skipping skill %s — body fetch failed', skill.name)
+                continue
+    return verified
+
+
 @router.get('/active', response_model=ActiveSkillsOutput)
 async def list_active_skills(
-    persona: PERSONA = Query(
-        ..., description='Persona slug — ro-assistent | juridisch-assistent | commercieel-assistent.'
+    model_id: str = Query(
+        ..., description='Model ID as selected in the chat UI. The BFF resolves the persona and checks admin valves.'
     ),
     user=Depends(get_verified_user),
 ) -> ActiveSkillsOutput:
@@ -106,46 +200,26 @@ async def list_active_skills(
 
     Returns an empty list if rm-skills has no mandatory entries for this
     persona; never returns 404. Transport / parser failures map to 502.
-    Returns an empty list when the user has opted out of skills_context.
+    Returns an empty list when the admin kill switch is off, the model is
+    not in scope, or the user has opted out of skills_context.
     """
+    admin_valves = _read_admin_valves()
+
+    if admin_valves.get('enabled') is False:
+        return ActiveSkillsOutput(persona='', skills=[])
+
+    if not _model_in_scope(model_id, admin_valves):
+        return ActiveSkillsOutput(persona='', skills=[])
+
+    persona = _resolve_persona(model_id)
+    if not persona:
+        return ActiveSkillsOutput(persona='', skills=[])
+
     if _user_opted_out(user):
         return ActiveSkillsOutput(persona=persona, skills=[])
 
-    headers = {
-        'Authorization': f'Bearer {_resolve_gateway_token()}',
-        'Accept': 'application/json',
-    }
-    forwarded = _forwarded_user_id(user)
-    if forwarded:
-        headers['X-Forwarded-User'] = forwarded
-
-    base_url = _resolve_skills_url().rstrip('/')
-    url = f'{base_url}/api/v1/skills'
-
     try:
-        async with httpx.AsyncClient(timeout=SKILLS_TIMEOUT_S) as client:
-            resp = await client.get(url, params={'persona': persona}, headers=headers)
-            resp.raise_for_status()
-            payload = resp.json()
-
-            mandatory = _parse_mandatory(payload)
-
-            # Verify each mandatory skill has a fetchable body with
-            # non-empty skill_md — skills whose body fetch fails are not
-            # injected by the filter, so the chip shouldn't show them.
-            verified: list[ActiveSkill] = []
-            for skill in mandatory:
-                body_url = f'{base_url}/api/v1/skills/{skill.name}'
-                try:
-                    body_resp = await client.get(body_url, headers=headers)
-                    body_resp.raise_for_status()
-                    body_data = body_resp.json()
-                    if isinstance(body_data, dict) and body_data.get('skill_md'):
-                        verified.append(skill)
-                except (httpx.HTTPError, ValueError):
-                    log.debug('Skipping skill %s — body fetch failed', skill.name)
-                    continue
-
+        verified = await _fetch_verified_skills(persona, admin_valves, user)
     except httpx.HTTPStatusError as e:
         upstream = ''
         if e.response is not None:
@@ -169,14 +243,14 @@ async def list_active_skills(
     return ActiveSkillsOutput(persona=persona, skills=verified)
 
 
-def _parse_mandatory(payload: Any) -> list[ActiveSkill]:
+def _parse_mandatory(payload: Any, max_skills: int = DEFAULT_MAX_SKILLS) -> list[ActiveSkill]:
     """Extract `mandatory: true` entries from rm-skills's list response.
 
     Accepts either `{skills: [...]}` (canonical) or a bare list (some
     early endpoints). Returns an empty list on any unexpected shape —
     a chip showing 0 is less surprising than a 502.
 
-    Truncates to MAX_SKILLS to match the skills_context filter's cap.
+    Truncates to max_skills to match the skills_context filter's cap.
     """
     raw = payload.get('skills') if isinstance(payload, dict) else payload
     if not isinstance(raw, list):
@@ -189,6 +263,6 @@ def _parse_mandatory(payload: Any) -> list[ActiveSkill]:
         name = s.get('name')
         if isinstance(name, str) and name:
             out.append(ActiveSkill(name=name, description=s.get('description') or ''))
-        if len(out) >= MAX_SKILLS:
+        if len(out) >= max_skills:
             break
     return out

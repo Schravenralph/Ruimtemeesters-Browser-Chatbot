@@ -22,20 +22,20 @@ export interface ActiveSkillsOutput {
 }
 
 /**
- * GET /api/v1/rm-skills/active?persona=<slug> — list mandatory skills
- * for the active persona. Returns `{persona, skills: []}` when the
- * persona has no mandatory entries; never throws on a 200.
+ * GET /api/v1/rm-skills/active?model_id=<id> — list mandatory skills
+ * for the model's resolved persona. The BFF handles admin valves,
+ * target_models scoping, and persona resolution server-side.
  *
  * Soft-fails on transport errors (returns null) — the chip should
  * disappear rather than break the navbar when rm-skills is offline.
  */
 export const getActiveSkills = async (
 	token: string,
-	persona: string
+	modelId: string
 ): Promise<ActiveSkillsOutput | null> => {
-	if (!persona) return null;
+	if (!modelId) return null;
 
-	const url = `${WEBUI_API_BASE_URL}/rm-skills/active?persona=${encodeURIComponent(persona)}`;
+	const url = `${WEBUI_API_BASE_URL}/rm-skills/active?model_id=${encodeURIComponent(modelId)}`;
 
 	try {
 		const res = await fetch(url, {
