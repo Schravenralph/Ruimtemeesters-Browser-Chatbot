@@ -1620,6 +1620,11 @@ class OAuthManager:
             redirect_url = f'{redirect_url}?error={urllib.parse.quote_plus(error_message)}'
             return RedirectResponse(url=redirect_url, headers=response.headers)
 
+        # Signal to the SvelteKit /auth page that this is the OAuth-callback
+        # redirect so it knows to bootstrap localStorage from GET /api/v1/auths/
+        # (the bearer cookie is now httpOnly and unreadable by JS).
+        redirect_url = f'{redirect_url}?oauth_callback=1'
+
         response = RedirectResponse(url=redirect_url, headers=response.headers)
 
         # Compute cookie expiry from JWT lifetime
@@ -1629,10 +1634,15 @@ class OAuthManager:
 
         # Set the cookie token
         # Redirect back to the frontend with the JWT token
+        # httpOnly=True mitigates session theft via XSS — the SvelteKit /auth
+        # page no longer reads document.cookie; instead it calls
+        # GET /api/v1/auths/ (which authenticates via this same cookie via
+        # `credentials: 'include'`) and reads the JWT from the response body
+        # before storing it in localStorage for subsequent Bearer-header use.
         response.set_cookie(
             key='token',
             value=jwt_token,
-            httponly=False,  # Required for frontend access
+            httponly=True,
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
             **({'max_age': cookie_max_age, 'expires': cookie_expires} if cookie_max_age is not None else {}),
