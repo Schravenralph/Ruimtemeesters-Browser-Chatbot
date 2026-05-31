@@ -11,12 +11,10 @@
 
 	const refresh = async (modelId: string | undefined) => {
 		const myGen = ++fetchGen;
+		persona = '';
+		skills = [];
+		open = false;
 		if (!modelId) {
-			if (myGen === fetchGen) {
-				persona = '';
-				skills = [];
-				open = false;
-			}
 			return;
 		}
 		const result = await getActiveSkills(localStorage.token, modelId);

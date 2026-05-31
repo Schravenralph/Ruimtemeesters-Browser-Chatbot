@@ -31,6 +31,7 @@ DEFAULT_SKILLS_URL = 'http://rm-skills:4101'
 SKILLS_TIMEOUT_S = 5.0
 DEFAULT_MAX_SKILLS = 5
 SKILLS_CONTEXT_FUNCTION_ID = 'skills_context'
+DEFAULT_TARGET_MODELS = 'rm-assistent,ro-assistent,juridisch-assistent,commercieel-assistent,RO-Assistent,Juridisch-Assistent,Commercieel-Assistent'
 
 _PERSONA_MAP: dict[str, str] = {
     'rm-assistent': 'ro-assistent',
@@ -132,10 +133,14 @@ def _resolve_persona(model_id: str) -> str:
 
 
 def _model_in_scope(model_id: str, admin_valves: dict) -> bool:
-    """Check if model_id is in the admin-configured target_models set."""
-    raw = admin_valves.get('target_models', '')
+    """Check if model_id is in the admin-configured target_models set.
+
+    Falls back to the filter's Pydantic default when the key is absent so the
+    BFF scope matches what the inlet actually evaluates at runtime.
+    """
+    raw = admin_valves.get('target_models', DEFAULT_TARGET_MODELS)
     if not isinstance(raw, str) or not raw.strip():
-        return True
+        raw = DEFAULT_TARGET_MODELS
     targets = {m.strip() for m in raw.split(',') if m.strip()}
     if not targets:
         return True
@@ -150,17 +155,33 @@ def _effective_max_skills(admin_valves: dict) -> int:
     return val
 
 
+def _effective_skills_url(admin_valves: dict) -> str:
+    """Return the rm-skills base URL from admin valves, falling back to env."""
+    valve_url = admin_valves.get('skills_url')
+    if isinstance(valve_url, str) and valve_url.strip():
+        return valve_url.strip()
+    return _resolve_skills_url()
+
+
+def _effective_skills_token(admin_valves: dict) -> str:
+    """Return the bearer token from admin valves, falling back to env."""
+    valve_token = admin_valves.get('skills_token')
+    if isinstance(valve_token, str):
+        return valve_token.strip()
+    return _resolve_gateway_token()
+
+
 async def _fetch_verified_skills(persona: str, admin_valves: dict, user: Any) -> list[ActiveSkill]:
     """Fetch mandatory skills from rm-skills and verify each body is accessible."""
-    headers: dict[str, str] = {
-        'Authorization': f'Bearer {_resolve_gateway_token()}',
-        'Accept': 'application/json',
-    }
+    token = _effective_skills_token(admin_valves)
+    headers: dict[str, str] = {'Accept': 'application/json'}
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
     forwarded = _forwarded_user_id(user)
     if forwarded:
         headers['X-Forwarded-User'] = forwarded
 
-    base_url = _resolve_skills_url().rstrip('/')
+    base_url = _effective_skills_url(admin_valves).rstrip('/')
     url = f'{base_url}/api/v1/skills'
 
     async with httpx.AsyncClient(timeout=SKILLS_TIMEOUT_S) as client:
@@ -205,10 +226,14 @@ async def list_active_skills(
     """
     admin_valves = _read_admin_valves()
 
-    if admin_valves.get('enabled') is False:
+    if not admin_valves.get('enabled', True):
         return ActiveSkillsOutput(persona='', skills=[])
 
     if not _model_in_scope(model_id, admin_valves):
+        return ActiveSkillsOutput(persona='', skills=[])
+
+    user_id = getattr(user, 'id', None)
+    if not user_id:
         return ActiveSkillsOutput(persona='', skills=[])
 
     persona = _resolve_persona(model_id)
