@@ -329,6 +329,14 @@
 	<MemoryCreateModal
 		bind:show={showCreate}
 		on:created={() => {
+			// Clear filters so the freshly-saved entry is guaranteed to
+			// appear in the list — otherwise active scope/type/project/
+			// search filters can hide it and the success toast looks
+			// like a no-op.
+			scopeFilter = 'all';
+			typeFilter = 'all';
+			projectFilter = '';
+			searchTerm = '';
 			void refresh();
 		}}
 	/>

@@ -42,13 +42,13 @@
 		scope = 'user';
 		projectId = '';
 		err = null;
-		saving = false;
 	};
 
-	$: if (!show) {
+	$: if (!show && !saving) {
 		// Reset whenever the modal closes so the next open starts blank.
-		// Bound `show` makes the parent the source of truth — we just
-		// clean up after the fade.
+		// Guarded on `!saving` so an in-flight POST started before close
+		// finishes naturally — its finally block sets `saving=false`, which
+		// retriggers this reactive and runs reset then.
 		setTimeout(reset, 200);
 	}
 
