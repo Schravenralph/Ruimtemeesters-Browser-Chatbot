@@ -2823,6 +2823,7 @@
 						{history}
 						title={$chatTitle}
 						bind:selectedModels
+						{atSelectedModel}
 						shareEnabled={!!history.currentId}
 						{initNewChat}
 						{archiveChatHandler}
